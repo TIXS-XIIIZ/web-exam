@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { GraduationCap, BookOpen, Clock, Award } from 'lucide-react'
+import { GraduationCap, BookOpen, Award } from 'lucide-react'
 
 export default function Login() {
   const handleLogin = async () => {
