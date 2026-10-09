@@ -4,16 +4,12 @@ import { supabase } from '../lib/supabase'
 import { Book, LogOut } from 'lucide-react'
 
 export default function SelectExam() {
-  const [categories, setCategories] = useState<any[]>([])
   const [exams, setExams] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     async function fetchData() {
-      const { data: catData } = await supabase.from('categories').select('*')
-      if (catData) setCategories(catData)
-
       const { data: examData } = await supabase.from('exams').select('*, categories(name)')
       if (examData) setExams(examData)
 
