@@ -26,7 +26,12 @@ function App() {
   }, [])
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-slate-500">
+        <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-medium">กำลังตรวจสอบการเข้าสู่ระบบ...</p>
+      </div>
+    )
   }
 
   return (
