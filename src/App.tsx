@@ -11,48 +11,67 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if URL contains OAuth tokens or code to be processed
-    const hasAuthParams =
-      window.location.hash.includes('access_token') ||
-      window.location.search.includes('code=')
+    let isMounted = true
 
-    // Listen for auth state changes (fires when OAuth tokens are parsed and stored)
+    async function initAuth() {
+      try {
+        // 1. Check if OAuth tokens exist in the URL hash
+        const rawHash = window.location.hash.startsWith('#')
+          ? window.location.hash.substring(1)
+          : window.location.hash
+
+        if (rawHash) {
+          const hashParams = new URLSearchParams(rawHash)
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+
+          if (accessToken && refreshToken) {
+            // Directly set session using extracted tokens
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+
+            if (!error && data?.session && isMounted) {
+              setSession(data.session)
+              setLoading(false)
+              // Clean tokens from URL address bar
+              window.history.replaceState(null, '', window.location.pathname)
+              return
+            }
+          }
+        }
+
+        // 2. If no tokens in hash or setSession completed, check existing session
+        const { data: { session: existingSession } } = await supabase.auth.getSession()
+        if (isMounted) {
+          setSession(existingSession)
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+        if (isMounted) {
+          setSession(null)
+          setLoading(false)
+        }
+      }
+    }
+
+    initAuth()
+
+    // 3. Listen for future auth state changes (e.g. sign in, sign out)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      if (newSession) {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (isMounted) {
         setSession(newSession)
         setLoading(false)
-        // Clean URL hash after tokens are consumed so the address bar looks clean
-        if (window.location.hash.includes('access_token')) {
-          window.history.replaceState(null, '', window.location.pathname + window.location.search)
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null)
-        setLoading(false)
       }
     })
-
-    // Check existing stored session
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      if (existingSession) {
-        setSession(existingSession)
-        setLoading(false)
-      } else if (!hasAuthParams) {
-        // Only stop loading if there are NO auth tokens in the URL being processed
-        setSession(null)
-        setLoading(false)
-      }
-    })
-
-    // Safety timeout: if token processing takes too long, stop loading
-    const timer = setTimeout(() => {
-      setLoading(false)
-    }, 4000)
 
     return () => {
+      isMounted = false
       subscription.unsubscribe()
-      clearTimeout(timer)
     }
   }, [])
 
