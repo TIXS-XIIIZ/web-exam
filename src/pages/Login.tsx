@@ -1,14 +1,32 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Scale, CheckCircle2, BookOpen, BarChart3, ShieldCheck, ArrowRight, Loader2, Mail, Lock, UserPlus, LogIn } from 'lucide-react'
+import { 
+  Scale, 
+  CheckCircle2, 
+  BookOpen, 
+  BarChart3, 
+  ShieldCheck, 
+  ArrowRight, 
+  Loader2, 
+  Mail, 
+  Lock, 
+  UserPlus, 
+  LogIn, 
+  Sparkles 
+} from 'lucide-react'
 
-export default function Login() {
+interface LoginProps {
+  initialError?: string | null
+}
+
+export default function Login({ initialError }: LoginProps) {
   const [loading, setLoading] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
   const [showEmailLogin, setShowEmailLogin] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(initialError || null)
   const [authMessage, setAuthMessage] = useState<string | null>(null)
 
   const handleGoogleLogin = async () => {
@@ -29,6 +47,24 @@ export default function Login() {
     }
   }
 
+  const handleDemoLogin = async () => {
+    try {
+      setDemoLoading(true)
+      setAuthError(null)
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'admin@nitikon.com',
+        password: 'ExamPassword2026!',
+      })
+      if (error) throw error
+      window.location.href = '/select'
+    } catch (err: any) {
+      console.error(err)
+      setAuthError(err.message || 'ไม่สามารถเข้าสู่ระบบด้วยบัญชีทดสอบได้')
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
@@ -45,16 +81,13 @@ export default function Login() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/select`,
-          }
         })
         if (error) throw error
         if (data.session) {
-          // Direct login if email confirmations are not required
           window.location.href = '/select'
         } else {
-          setAuthMessage('สร้างบัญชีสำเร็จ! หากต้องยืนยันตัวตน โปรดตรวจสอบลิงก์ในกล่องข้อความอีเมลของคุณ')
+          setAuthMessage('สร้างบัญชีสำเร็จ! เข้าสู่ระบบได้ทันที')
+          setIsSignUp(false)
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -168,25 +201,26 @@ export default function Login() {
 
             {/* Error & Message Alerts */}
             {authError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs leading-relaxed">
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs leading-relaxed">
                 {authError}
               </div>
             )}
             {authMessage && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed">
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed">
                 {authMessage}
               </div>
             )}
 
-            {/* Google Sign-in button */}
-            <div className="space-y-4">
+            {/* Login Options Container */}
+            <div className="space-y-3.5">
+              {/* Option 1: Google OAuth Button */}
               <button
                 onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full relative group flex items-center justify-center gap-3 py-3.5 px-5 rounded-2xl bg-white text-slate-900 font-semibold text-base hover:bg-slate-100 active:scale-[0.99] transition-all duration-200 shadow-md shadow-white/10 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                disabled={loading || demoLoading}
+                className="w-full relative group flex items-center justify-center gap-3 py-3.5 px-5 rounded-2xl bg-white text-slate-900 font-semibold text-sm hover:bg-slate-100 active:scale-[0.99] transition-all duration-200 shadow-md shadow-white/10 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
               >
                 {loading && !showEmailLogin ? (
-                  <Loader2 className="animate-spin text-slate-700" size={22} />
+                  <Loader2 className="animate-spin text-slate-700" size={20} />
                 ) : (
                   <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
                     <path
@@ -208,10 +242,24 @@ export default function Login() {
                   </svg>
                 )}
                 <span>เข้าสู่ระบบด้วย Google (Gmail)</span>
-                <ArrowRight size={18} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight size={17} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              {/* Alternative Email Login Divider */}
+              {/* Option 2: Instant Demo / Test Account Login Button */}
+              <button
+                onClick={handleDemoLogin}
+                disabled={loading || demoLoading}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-medium text-sm hover:text-white transition-all duration-200 cursor-pointer disabled:opacity-70"
+              >
+                {demoLoading ? (
+                  <Loader2 className="animate-spin text-indigo-400" size={18} />
+                ) : (
+                  <Sparkles size={18} className="text-amber-400" />
+                )}
+                <span>{demoLoading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วยบัญชีทดสอบ (คลิกเดียวเริ่มได้ทันที)'}</span>
+              </button>
+
+              {/* Option 3: Collapsible Email Login Divider */}
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-slate-800"></div>
                 <button
@@ -232,7 +280,7 @@ export default function Login() {
                       <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-500 pointer-events-none" />
                       <input
                         type="email"
-                        placeholder="อีเมลของคุณ (เช่น test@gmail.com)"
+                        placeholder="อีเมลของคุณ (เช่น test@example.com)"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -257,7 +305,7 @@ export default function Login() {
 
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || demoLoading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-70 cursor-pointer"
                   >
                     {loading && showEmailLogin ? (
@@ -265,7 +313,7 @@ export default function Login() {
                     ) : isSignUp ? (
                       <>
                         <UserPlus size={16} />
-                        <span>สมัครสมาชิกใหม่</span>
+                        <span>สมัครสมาชิกใหม่ (ใช้งานได้ทันที)</span>
                       </>
                     ) : (
                       <>
