@@ -144,25 +144,45 @@ export default function ExamSession() {
           setExamTitle(examData.title)
         }
 
-        // 2. Fetch questions with choices and topic name
-        let query = supabase
-          .from('questions')
-          .select(`
-            id, question_text, explanation, order_index, topic_id,
-            topics (name),
-            choices (id, choice_text, is_correct, order_index)
-          `)
-          .eq('exam_id', examId)
+        // 2. Fetch all questions with choices and topic name (chunked pagination to exceed Supabase 1000 row limit)
+        let allQuestionsRaw: any[] = []
+        let qFrom = 0
+        const pageSize = 1000
+        let qHasMore = true
 
-        if (topicId) {
-          query = query.eq('topic_id', topicId)
+        while (qHasMore) {
+          let chunkQuery = supabase
+            .from('questions')
+            .select(`
+              id, question_text, explanation, order_index, topic_id,
+              topics (name),
+              choices (id, choice_text, is_correct, order_index)
+            `)
+            .eq('exam_id', examId)
+
+          if (topicId) {
+            chunkQuery = chunkQuery.eq('topic_id', topicId)
+          }
+
+          const { data: chunk, error: qError } = await chunkQuery
+            .order('order_index', { ascending: true })
+            .range(qFrom, qFrom + pageSize - 1)
+
+          if (qError) throw qError
+
+          if (chunk && chunk.length > 0) {
+            allQuestionsRaw = allQuestionsRaw.concat(chunk)
+            if (chunk.length < pageSize) {
+              qHasMore = false
+            } else {
+              qFrom += pageSize
+            }
+          } else {
+            qHasMore = false
+          }
         }
 
-        const { data: qData, error: qError } = await query.order('order_index', { ascending: true })
-
-        if (qError) throw qError
-
-        let formattedQuestions = qData?.map((q: any) => ({
+        let formattedQuestions = allQuestionsRaw.map((q: any) => ({
           ...q,
           question_text: cleanThaiText(q.question_text),
           explanation: cleanThaiText(q.explanation),
@@ -172,7 +192,7 @@ export default function ExamSession() {
               choice_text: cleanThaiText(c.choice_text),
             }))
             .sort((a: any, b: any) => a.order_index - b.order_index),
-        })) || []
+        }))
 
         const shouldRandomize = attemptData?.is_random ?? (searchParams.get('random') === '1')
         if (shouldRandomize && attemptId) {
@@ -192,18 +212,38 @@ export default function ExamSession() {
 
         setQuestions(formattedQuestions)
 
-        // 3. Fetch existing answers and question time tracking
-        const { data: aData } = await supabase
-          .from('exam_attempt_answers')
-          .select('*')
-          .eq('attempt_id', attemptId)
+        // 3. Fetch existing answers and question time tracking (chunked pagination)
+        let allAnswersRaw: any[] = []
+        let aFrom = 0
+        let aHasMore = true
 
-        if (aData) {
+        while (aHasMore) {
+          const { data: aChunk, error: aError } = await supabase
+            .from('exam_attempt_answers')
+            .select('*')
+            .eq('attempt_id', attemptId)
+            .range(aFrom, aFrom + pageSize - 1)
+
+          if (aError) throw aError
+
+          if (aChunk && aChunk.length > 0) {
+            allAnswersRaw = allAnswersRaw.concat(aChunk)
+            if (aChunk.length < pageSize) {
+              aHasMore = false
+            } else {
+              aFrom += pageSize
+            }
+          } else {
+            aHasMore = false
+          }
+        }
+
+        if (allAnswersRaw.length > 0) {
           const existingAnswers: Record<number, AnswerState> = {}
           const existingTimes: Record<number, number> = {}
           const recordIds: Record<number, number> = {}
 
-          aData.forEach((ans) => {
+          allAnswersRaw.forEach((ans) => {
             existingAnswers[ans.question_id] = {
               selectedChoiceId: ans.selected_choice_id,
               isCorrect: ans.is_correct,

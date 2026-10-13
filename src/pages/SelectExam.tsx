@@ -19,7 +19,8 @@ import {
   Check,
   X,
   Lightbulb,
-  Shuffle
+  Shuffle,
+  Trash2
 } from 'lucide-react'
 
 export default function SelectExam() {
@@ -34,6 +35,8 @@ export default function SelectExam() {
   const [editingTitle, setEditingTitle] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [deletingAttemptId, setDeletingAttemptId] = useState<number | null>(null)
+  const [isClearingAll, setIsClearingAll] = useState<boolean>(false)
 
   // Exam Mode, Time Setting, and Random state
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('real_exam')
@@ -81,7 +84,7 @@ export default function SelectExam() {
             `)
             .eq('user_id', currentUser.id)
             .order('started_at', { ascending: false })
-            .limit(10)
+            .limit(50)
           if (attempts) setRecentAttempts(attempts)
         }
       } catch (err) {
@@ -180,6 +183,50 @@ export default function SelectExam() {
       alert('เกิดข้อผิดพลาด: ' + err.message)
     } finally {
       setSavingTitle(false)
+    }
+  }
+
+  const handleDeleteAttempt = async (attemptId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลคะแนนและคำตอบในรอบนี้จะถูกลบถาวร')
+    if (!confirmed) return
+
+    try {
+      setDeletingAttemptId(attemptId)
+      const { error } = await supabase
+        .from('exam_attempts')
+        .delete()
+        .eq('id', attemptId)
+
+      if (error) throw error
+
+      setRecentAttempts((prev) => prev.filter((a) => a.id !== attemptId))
+    } catch (err: any) {
+      alert('ไม่สามารถลบประวัติได้: ' + err.message)
+    } finally {
+      setDeletingAttemptId(null)
+    }
+  }
+
+  const handleClearAllHistory = async () => {
+    if (!user) return
+    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบทั้งหมดของคุณใช่หรือไม่?\nประวัติการทำข้อสอบทุกรอบจะถูกลบถาวรและไม่สามารถกู้คืนได้')
+    if (!confirmed) return
+
+    try {
+      setIsClearingAll(true)
+      const { error } = await supabase
+        .from('exam_attempts')
+        .delete()
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      setRecentAttempts([])
+    } catch (err: any) {
+      alert('ไม่สามารถลบประวัติทั้งหมดได้: ' + err.message)
+    } finally {
+      setIsClearingAll(false)
     }
   }
 
@@ -825,13 +872,25 @@ export default function SelectExam() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
                           <button
                             onClick={(e) => handleStartEdit(att, e)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-colors cursor-pointer"
                             title="เปลี่ยนชื่อประวัตินี้"
                           >
                             <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteAttempt(att.id, e)}
+                            disabled={deletingAttemptId === att.id}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="ลบประวัตินี้"
+                          >
+                            {deletingAttemptId === att.id ? (
+                              <Loader2 size={14} className="animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
                           </button>
                           <span
                             className={`text-xs font-bold px-3 py-1 rounded-full ${
@@ -921,7 +980,20 @@ export default function SelectExam() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex justify-end">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              {recentAttempts.length > 0 ? (
+                <button
+                  onClick={handleClearAllHistory}
+                  disabled={isClearingAll}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50/80 hover:bg-rose-100 text-rose-700 text-xs font-semibold cursor-pointer transition-colors"
+                  title="ลบประวัติการสอบทั้งหมด"
+                >
+                  {isClearingAll ? <Loader2 size={13} className="animate-spin text-rose-600" /> : <Trash2 size={13} />}
+                  <span>ลบประวัติทั้งหมด</span>
+                </button>
+              ) : (
+                <div />
+              )}
               <button
                 onClick={() => {
                   setShowHistoryModal(false)

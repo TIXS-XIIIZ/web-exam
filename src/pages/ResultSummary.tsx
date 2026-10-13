@@ -25,7 +25,8 @@ import {
   ChevronUp,
   Lightbulb,
   CheckCircle,
-  Shuffle
+  Shuffle,
+  Trash2
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
 
@@ -91,6 +92,7 @@ export default function ResultSummary() {
   const [reviewFilter, setReviewFilter] = useState<'all' | 'wrong' | 'correct'>('all')
   const [expandedQuestionId, setExpandedQuestionId] = useState<number | null>(null)
   const [retaking, setRetaking] = useState(false)
+  const [deletingAttempt, setDeletingAttempt] = useState(false)
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -107,8 +109,23 @@ export default function ResultSummary() {
           .select(`
             id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, is_random, started_at, finished_at,
             exams (id, title, passing_score),
-            topics (id, name),
-            exam_attempt_answers (
+            topics (id, name)
+          `)
+          .eq('id', attemptId)
+          .single()
+
+        if (error || !attempt) throw error
+
+        // Chunked pagination for all answers to exceed PostgREST 1000 rows limit
+        let allAnswers: any[] = []
+        let aFrom = 0
+        const pageSize = 1000
+        let aHasMore = true
+
+        while (aHasMore) {
+          const { data: aChunk, error: aError } = await supabase
+            .from('exam_attempt_answers')
+            .select(`
               id,
               question_id,
               selected_choice_id,
@@ -123,12 +140,24 @@ export default function ResultSummary() {
                 topics (name),
                 choices (id, choice_text, is_correct, order_index)
               )
-            )
-          `)
-          .eq('id', attemptId)
-          .single()
+            `)
+            .eq('attempt_id', attemptId)
+            .order('id', { ascending: true })
+            .range(aFrom, aFrom + pageSize - 1)
 
-        if (error || !attempt) throw error
+          if (aError) throw aError
+
+          if (aChunk && aChunk.length > 0) {
+            allAnswers = allAnswers.concat(aChunk)
+            if (aChunk.length < pageSize) {
+              aHasMore = false
+            } else {
+              aFrom += pageSize
+            }
+          } else {
+            aHasMore = false
+          }
+        }
 
         const examData = attempt.exams as any
         setExamId(examData?.id || null)
@@ -150,7 +179,7 @@ export default function ResultSummary() {
         setTimeSpent(seconds)
 
         // Process answers & topic stats
-        const answers = (attempt.exam_attempt_answers as any[]) || []
+        const answers = allAnswers
         let correctCount = 0
         const tStats: Record<string, TopicStat> = {}
         let detectedTopicId: number | null = null
@@ -286,6 +315,27 @@ export default function ResultSummary() {
     } catch (err: any) {
       alert('ไม่สามารถเริ่มรอบใหม่ได้: ' + err.message)
       setRetaking(false)
+    }
+  }
+
+  const handleDeleteAttempt = async () => {
+    if (!attemptId) return
+    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลผลคะแนนและสถิติทั้งหมดในรอบนี้จะถูกลบถาวร')
+    if (!confirmed) return
+
+    try {
+      setDeletingAttempt(true)
+      const { error } = await supabase
+        .from('exam_attempts')
+        .delete()
+        .eq('id', attemptId)
+
+      if (error) throw error
+
+      navigate('/select')
+    } catch (err: any) {
+      alert('ไม่สามารถลบประวัติได้: ' + err.message)
+      setDeletingAttempt(false)
     }
   }
 
@@ -1027,7 +1077,7 @@ export default function ResultSummary() {
           </Link>
           <button
             onClick={handleRetake}
-            disabled={retaking}
+            disabled={retaking || deletingAttempt}
             className="w-full sm:w-auto px-7 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
           >
             {retaking ? (
@@ -1036,6 +1086,21 @@ export default function ResultSummary() {
               <>
                 <RotateCcw size={16} />
                 <span>ทำชุดนี้ใหม่อีกครั้ง</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleDeleteAttempt}
+            disabled={deletingAttempt || retaking}
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="ลบผลการสอบรอบนี้ออกจากประวัติ"
+          >
+            {deletingAttempt ? (
+              <Loader2 size={16} className="animate-spin text-rose-600" />
+            ) : (
+              <>
+                <Trash2 size={16} />
+                <span>ลบประวัติรอบนี้</span>
               </>
             )}
           </button>
