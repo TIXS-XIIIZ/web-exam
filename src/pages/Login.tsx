@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAlert } from '../components/AlertProvider'
 import { 
@@ -30,6 +30,20 @@ export default function Login({ initialError }: LoginProps) {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(initialError || null)
   const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const [questionCount, setQuestionCount] = useState(1110)
+  const [topicCount, setTopicCount] = useState(13)
+
+  useEffect(() => {
+    async function loadCounts() {
+      const [exams, topics] = await Promise.all([
+        supabase.from('exams').select('total_questions'),
+        supabase.from('topics').select('id', { count: 'exact', head: true }),
+      ])
+      if (exams.data) setQuestionCount(exams.data.reduce((sum, exam) => sum + (exam.total_questions || 0), 0))
+      if (topics.count !== null) setTopicCount(topics.count)
+    }
+    loadCounts()
+  }, [])
 
   const handleGoogleLogin = async () => {
     try {
@@ -123,7 +137,7 @@ export default function Login({ initialError }: LoginProps) {
   const features = [
     {
       icon: BookOpen,
-      title: 'คลังข้อสอบ 1,050 ข้อ',
+      title: `คลังข้อสอบ ${questionCount.toLocaleString('th-TH')} ข้อ`,
       desc: 'ครอบคลุมครบทุกหมวดวิชากฎหมายที่ใช้สอบนิติกร',
     },
     {
@@ -167,7 +181,7 @@ export default function Login({ initialError }: LoginProps) {
         <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm font-medium">
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-            พร้อมใช้งาน • ครอบคลุม 9 หมวดหลัก
+            พร้อมใช้งาน • ครอบคลุม {topicCount} หมวดหลัก
           </div>
 
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
@@ -364,7 +378,7 @@ export default function Login({ initialError }: LoginProps) {
             {/* Micro stats banner inside card */}
             <div className="mt-6 pt-5 border-t border-slate-800/80 flex items-center justify-around text-center">
               <div>
-                <div className="text-base font-bold text-white">1,050</div>
+                <div className="text-base font-bold text-white">{questionCount.toLocaleString('th-TH')}</div>
                 <div className="text-[11px] text-slate-400">ข้อสอบบรรจุ</div>
               </div>
               <div className="h-7 w-[1px] bg-slate-800"></div>
@@ -374,7 +388,7 @@ export default function Login({ initialError }: LoginProps) {
               </div>
               <div className="h-7 w-[1px] bg-slate-800"></div>
               <div>
-                <div className="text-base font-bold text-indigo-400">9 หมวด</div>
+                <div className="text-base font-bold text-indigo-400">{topicCount} หมวด</div>
                 <div className="text-[11px] text-slate-400">สาระวิชา</div>
               </div>
             </div>

@@ -1,5 +1,15 @@
 # React + TypeScript + Vite
 
+## Question data
+
+The 60 additional questions are kept in `data/Nitikon_New_60_Database.md`.
+To import them into the existing Supabase exam, set `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`, then run
+`node import_new_60.mjs`. The importer can be rerun: it identifies each source
+question through `questions.context_content`, fills missing choices, updates the
+exam count, and verifies public read access. Keep the service role key out of the
+browser and out of version control.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

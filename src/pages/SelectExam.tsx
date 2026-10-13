@@ -262,6 +262,8 @@ export default function SelectExam() {
   }
 
   const primaryExam = exams[0] || { id: 1, title: 'คลังข้อสอบนิติกร (ทั้งหมด)' }
+  const totalQuestionCount = exams.reduce((sum, exam) => sum + (exam.total_questions || 0), 0)
+  const totalQuestionLabel = totalQuestionCount.toLocaleString('th-TH')
 
   return (
     <div className="min-h-screen bg-slate-50/80 text-slate-800 flex flex-col">
@@ -505,7 +507,7 @@ export default function SelectExam() {
               }`}
             >
               <BookOpen size={16} />
-              <span>2. ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)</span>
+              <span>2. ทำข้อสอบรวมทั้งหมด ({totalQuestionLabel} ข้อ)</span>
             </button>
             <button
               onClick={() => setActiveTab('topics')}
@@ -518,7 +520,7 @@ export default function SelectExam() {
               <Filter size={16} />
               <span>2. เลือกทำเฉพาะหมวด (แยกตามสาระวิชา)</span>
               <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700 font-extrabold">
-                9 หมวด
+                {topics.length} หมวด
               </span>
             </button>
           </div>
@@ -534,7 +536,7 @@ export default function SelectExam() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">ชุดข้อสอบรวม</h2>
-                    <p className="text-xs text-slate-500">รวมข้อสอบทุกสาระวิชา 1,050 ข้อ</p>
+                    <p className="text-xs text-slate-500">รวมข้อสอบทุกสาระวิชา {totalQuestionLabel} ข้อ</p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">
                     {exams.length} ชุด
@@ -572,7 +574,7 @@ export default function SelectExam() {
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mb-6 pt-4 border-t border-slate-100">
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
                           <Layers size={15} className="text-indigo-500" />
-                          <span>จำนวน <strong>{exam.total_questions || 1050}</strong> ข้อ</span>
+                          <span>จำนวน <strong>{exam.total_questions?.toLocaleString('th-TH') || 0}</strong> ข้อ</span>
                         </div>
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
                           <Clock size={15} className={examMode === 'real_exam' ? 'text-amber-500 font-bold' : 'text-slate-500'} />
@@ -798,7 +800,7 @@ export default function SelectExam() {
                   const topicName = att.topics?.name
                   const defaultName = isSingleTopic
                     ? (topicName ? `หมวด: ${topicName}` : 'รายหมวดวิชา')
-                    : 'ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)'
+                    : `ทำข้อสอบรวมทั้งหมด (${totalQuestionLabel} ข้อ)`
                   const displayName = att.custom_title || defaultName
 
                   return (

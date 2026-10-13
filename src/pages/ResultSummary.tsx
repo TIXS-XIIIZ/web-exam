@@ -81,6 +81,7 @@ export default function ResultSummary() {
 
   const [loading, setLoading] = useState(true)
   const [examTitle, setExamTitle] = useState('')
+  const [examQuestionCount, setExamQuestionCount] = useState(1110)
   const [examId, setExamId] = useState<number | null>(null)
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('practice')
   const [timeLimitSeconds, setTimeLimitSeconds] = useState<number>(10800)
@@ -110,7 +111,7 @@ export default function ResultSummary() {
           .from('exam_attempts')
           .select(`
             id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, is_random, started_at, finished_at,
-            exams (id, title, passing_score),
+            exams (id, title, passing_score, total_questions),
             topics (id, name)
           `)
           .eq('id', attemptId)
@@ -162,6 +163,7 @@ export default function ResultSummary() {
         }
 
         const examData = attempt.exams as any
+        if (examData?.total_questions) setExamQuestionCount(examData.total_questions)
         setExamId(examData?.id || null)
 
         const mode = (attempt.exam_mode as 'real_exam' | 'practice') || 'practice'
@@ -253,7 +255,7 @@ export default function ResultSummary() {
         } else if (topicName) {
           setExamTitle(`หมวด: ${topicName}`)
         } else {
-          setExamTitle(examData?.title || 'ข้อสอบรวมทั้งหมด (1,050 ข้อ)')
+          setExamTitle(examData?.title || 'ข้อสอบรวมทั้งหมด')
         }
 
         setScore({
@@ -520,7 +522,7 @@ export default function ResultSummary() {
                 ) : (
                   <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                     <BookOpen size={13} />
-                    ข้อสอบรวมทั้งหมด (1,050 ข้อ)
+                    ข้อสอบรวมทั้งหมด ({examQuestionCount.toLocaleString('th-TH')} ข้อ)
                   </span>
                 )}
               </div>
