@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { supabase } from './lib/supabase'
+import { supabase, cleanJwt } from './lib/supabase'
 import Login from './pages/Login'
 import SelectExam from './pages/SelectExam'
 import ExamSession from './pages/ExamSession'
@@ -37,8 +37,8 @@ function App() {
           return
         }
 
-        const accessToken = hashParams.get('access_token')
-        const refreshToken = hashParams.get('refresh_token')
+        const accessToken = cleanJwt(hashParams.get('access_token'))
+        const refreshToken = cleanJwt(hashParams.get('refresh_token'))
 
         if (accessToken && refreshToken) {
           // Explicitly set session from hash tokens
