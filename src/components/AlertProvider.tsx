@@ -172,7 +172,7 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto relative overflow-hidden rounded-2xl border ${typeConfig.border} ${typeConfig.bg} backdrop-blur-md shadow-xl shadow-slate-900/10 p-3.5 pr-9 sm:p-4 sm:pr-10 max-w-sm w-full transition-all duration-300 transform translate-y-0 opacity-100 animate-in fade-in slide-in-from-top-3`}
+              className={`pointer-events-auto relative overflow-hidden rounded-2xl border ${typeConfig.border} ${typeConfig.bg} backdrop-blur-md shadow-xl shadow-slate-900/10 p-3.5 pr-9 sm:p-4 sm:pr-10 max-w-sm w-full transition-all duration-300 transform translate-y-0 opacity-100 animate-toast`}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-8 h-8 rounded-xl ${typeConfig.iconBg} flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm`}>
@@ -220,11 +220,11 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-modal"
           >
             <div className="flex items-start gap-4">
               {confirmState.options.type === 'danger' ? (
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-500/20 ring-4 ring-rose-50">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-500/20 ring-4 ring-rose-50 animate-glow-rose">
                   <Trash2 size={24} />
                 </div>
               ) : confirmState.options.type === 'warning' ? (
@@ -280,11 +280,11 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-5 animate-modal"
           >
             <div className="flex items-start gap-4">
               {alertModalState.options.type === 'error' ? (
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-500/20 ring-4 ring-rose-50">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-500/20 ring-4 ring-rose-50 animate-glow-rose">
                   <XCircle size={24} />
                 </div>
               ) : alertModalState.options.type === 'warning' ? (

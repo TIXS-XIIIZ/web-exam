@@ -592,7 +592,7 @@ export default function ExamSession() {
                 if (examMode === 'real_exam') {
                   // Real Exam: neutral selection styling (no right/wrong reveals)
                   if (isSelected) {
-                    stateStyle = 'bg-indigo-50/90 border-indigo-600 text-indigo-950 font-medium ring-2 ring-indigo-500/20 shadow-sm'
+                    stateStyle = 'bg-indigo-50/90 border-indigo-600 text-indigo-950 font-medium ring-2 ring-indigo-500/20 shadow-sm animate-select'
                     badgeStyle = 'bg-indigo-600 text-white border-indigo-600'
                     icon = <CheckCircle2 className="text-indigo-600 flex-shrink-0" size={20} />
                   } else {
@@ -603,11 +603,11 @@ export default function ExamSession() {
                   // Practice Mode: Instant feedback
                   if (hasAnswered) {
                     if (choice.is_correct) {
-                      stateStyle = 'bg-emerald-50/80 border-emerald-500 text-emerald-950 font-medium ring-2 ring-emerald-400/20'
+                      stateStyle = 'bg-emerald-50/90 border-emerald-500 text-emerald-950 font-medium ring-2 ring-emerald-400/20 animate-select'
                       badgeStyle = 'bg-emerald-500 text-white border-emerald-600'
                       icon = <CheckCircle2 className="text-emerald-600 flex-shrink-0" size={20} />
                     } else if (isSelected && !choice.is_correct) {
-                      stateStyle = 'bg-rose-50/80 border-rose-500 text-rose-950 ring-2 ring-rose-400/20'
+                      stateStyle = 'bg-rose-50/90 border-rose-500 text-rose-950 ring-2 ring-rose-400/20 animate-select'
                       badgeStyle = 'bg-rose-500 text-white border-rose-600'
                       icon = <XCircle className="text-rose-600 flex-shrink-0" size={20} />
                     } else {
@@ -622,10 +622,10 @@ export default function ExamSession() {
                     key={choice.id}
                     disabled={examMode === 'practice' && hasAnswered}
                     onClick={() => handleSelectAnswer(choice.id, choice.is_correct)}
-                    className={`w-full text-left p-3.5 sm:p-4.5 rounded-xl sm:rounded-2xl border transition-all duration-200 flex items-start justify-between gap-2.5 sm:gap-3 ${stateStyle} disabled:cursor-default cursor-pointer active:scale-[0.99]`}
+                    className={`w-full text-left p-3.5 sm:p-4.5 rounded-xl sm:rounded-2xl border transition-all duration-200 flex items-start justify-between gap-2.5 sm:gap-3 ${stateStyle} disabled:cursor-default cursor-pointer active:scale-[0.98]`}
                   >
                     <div className="flex items-start gap-2.5 sm:gap-3 flex-1 min-w-0">
-                      <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold border flex-shrink-0 mt-0.5 ${badgeStyle}`}>
+                      <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold border flex-shrink-0 mt-0.5 transition-transform duration-200 ${isSelected ? 'scale-105' : ''} ${badgeStyle}`}>
                         {['ก', 'ข', 'ค', 'ง'][idx] || choiceLabel || (idx + 1)}
                       </span>
                       <span className="text-xs sm:text-sm md:text-base leading-relaxed break-words pt-0.5 flex-1">

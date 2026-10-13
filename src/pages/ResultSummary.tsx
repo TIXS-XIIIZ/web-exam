@@ -482,10 +482,11 @@ export default function ResultSummary() {
 
         {/* Hero Score Card */}
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-10 border border-slate-200/90 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-indigo-100/50 to-blue-50/20 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-indigo-100/50 to-blue-50/20 rounded-full blur-3xl pointer-events-none animate-blob"></div>
+          <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-emerald-100/40 to-teal-50/20 rounded-full blur-3xl pointer-events-none animate-blob-delayed"></div>
 
           <div className="relative z-10 flex flex-col items-center text-center space-y-3 sm:space-y-4">
-            <div className="w-14 sm:w-16 h-14 sm:h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-inner">
+            <div className={`w-14 sm:w-16 h-14 sm:h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-inner ${isPassed ? 'animate-trophy' : ''}`}>
               <Trophy size={32} />
             </div>
 

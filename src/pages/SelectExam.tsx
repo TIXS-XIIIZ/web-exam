@@ -299,9 +299,9 @@ export default function SelectExam() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 flex-1 w-full space-y-6 sm:space-y-8">
         {/* Welcome Banner */}
-        {/* Welcome Banner */}
         <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white p-5 sm:p-8 md:p-10 shadow-xl shadow-indigo-950/10">
-          <div className="absolute right-[-40px] top-[-40px] w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute right-[-40px] top-[-40px] w-72 h-72 bg-indigo-500/25 rounded-full blur-3xl pointer-events-none animate-blob"></div>
+          <div className="absolute left-[-30px] bottom-[-30px] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl pointer-events-none animate-blob-delayed"></div>
           <div className="relative z-10 max-w-2xl space-y-2.5 sm:space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-medium text-indigo-200">
               <Sparkles size={14} className="text-amber-300" />
@@ -332,15 +332,15 @@ export default function SelectExam() {
             {/* Real Exam Mode */}
             <div
               onClick={() => setExamMode('real_exam')}
-              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between gap-3 ${
+              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 active:scale-[0.98] flex items-center justify-between gap-3 ${
                 examMode === 'real_exam'
-                  ? 'border-amber-500 bg-amber-50/50 shadow-sm'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  ? 'border-amber-500 bg-amber-50/60 shadow-md shadow-amber-500/10'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 bg-white'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-colors ${
-                  examMode === 'real_exam' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-slate-100 text-slate-500'
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-transform duration-200 ${
+                  examMode === 'real_exam' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20 scale-105' : 'bg-slate-100 text-slate-500'
                 }`}>
                   <Clock size={20} />
                 </div>
@@ -353,8 +353,8 @@ export default function SelectExam() {
                   </p>
                 </div>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                examMode === 'real_exam' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${
+                examMode === 'real_exam' ? 'border-amber-500 bg-amber-500 text-white scale-110' : 'border-slate-300'
               }`}>
                 {examMode === 'real_exam' && <Check size={12} strokeWidth={3} />}
               </div>
@@ -363,15 +363,15 @@ export default function SelectExam() {
             {/* Practice Mode */}
             <div
               onClick={() => setExamMode('practice')}
-              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between gap-3 ${
+              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 active:scale-[0.98] flex items-center justify-between gap-3 ${
                 examMode === 'practice'
-                  ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10'
+                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 bg-white'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-colors ${
-                  examMode === 'practice' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-100 text-slate-500'
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-transform duration-200 ${
+                  examMode === 'practice' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 scale-105' : 'bg-slate-100 text-slate-500'
                 }`}>
                   <Lightbulb size={20} />
                 </div>
@@ -384,8 +384,8 @@ export default function SelectExam() {
                   </p>
                 </div>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                examMode === 'practice' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${
+                examMode === 'practice' ? 'border-indigo-600 bg-indigo-600 text-white scale-110' : 'border-slate-300'
               }`}>
                 {examMode === 'practice' && <Check size={12} strokeWidth={3} />}
               </div>
@@ -546,11 +546,11 @@ export default function SelectExam() {
                   return (
                     <div
                       key={exam.id}
-                      className="group relative bg-white rounded-2xl p-6 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-300"
+                      className="group relative bg-white rounded-2xl p-6 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:shadow-indigo-500/10 transition-all duration-300"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
+                          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
                             <BookOpen size={24} />
                           </div>
                           <div>
@@ -594,7 +594,7 @@ export default function SelectExam() {
                       <button
                         onClick={() => handleStartExam(exam.id)}
                         disabled={isStarting}
-                        className={`w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm shadow-md active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer ${
+                        className={`w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm shadow-md active:scale-95 hover:shadow-lg transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer ${
                           examMode === 'real_exam'
                             ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20 hover:shadow-amber-600/30'
                             : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20 hover:shadow-indigo-600/30'
@@ -639,18 +639,18 @@ export default function SelectExam() {
                     return (
                       <div
                         key={topic.id}
-                        className="bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                        className="group bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
                       >
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-3">
-                            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
                               {idx + 1}
                             </span>
                             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
                               {topic.questionCount} ข้อ
                             </span>
                           </div>
-                          <h3 className="font-bold text-slate-900 text-sm mb-3 line-clamp-2 leading-snug">
+                          <h3 className="font-bold text-slate-900 text-sm mb-3 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
                             {topic.name}
                           </h3>
                         </div>
@@ -658,10 +658,10 @@ export default function SelectExam() {
                         <button
                           onClick={() => handleStartExam(primaryExam.id, topic.id)}
                           disabled={isStarting}
-                          className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-semibold text-xs transition-all duration-200 cursor-pointer disabled:opacity-70 ${
+                          className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-semibold text-xs active:scale-95 transition-all duration-200 cursor-pointer disabled:opacity-70 ${
                             examMode === 'real_exam'
-                              ? 'bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 hover:border-amber-600'
-                              : 'bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white'
+                              ? 'bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 hover:border-amber-600 shadow-sm hover:shadow-amber-600/20'
+                              : 'bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white shadow-sm hover:shadow-indigo-600/20'
                           }`}
                         >
                           {isStarting ? (
