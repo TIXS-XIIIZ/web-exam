@@ -18,7 +18,8 @@ import {
   Pencil,
   Check,
   X,
-  Lightbulb
+  Lightbulb,
+  Shuffle
 } from 'lucide-react'
 
 export default function SelectExam() {
@@ -34,11 +35,12 @@ export default function SelectExam() {
   const [savingTitle, setSavingTitle] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
 
-  // Exam Mode and Time Setting state
+  // Exam Mode, Time Setting, and Random state
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('real_exam')
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number>(180)
   const [customMinutesInput, setCustomMinutesInput] = useState<string>('180')
   const [isCustomTime, setIsCustomTime] = useState<boolean>(false)
+  const [isRandom, setIsRandom] = useState<boolean>(true)
 
   const navigate = useNavigate()
 
@@ -73,7 +75,7 @@ export default function SelectExam() {
           const { data: attempts } = await supabase
             .from('exam_attempts')
             .select(`
-              id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, status, total_score, started_at, finished_at,
+              id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, is_random, status, total_score, started_at, finished_at,
               exams (title),
               topics (name)
             `)
@@ -107,6 +109,7 @@ export default function SelectExam() {
         status: 'in_progress',
         exam_mode: examMode,
         time_limit_seconds: timeLimitSecs,
+        is_random: isRandom,
       }
       if (topicId) {
         insertData.topic_id = topicId
@@ -128,6 +131,7 @@ export default function SelectExam() {
       queryParams.set('attemptId', String(attempt.id))
       if (topicId) queryParams.set('topicId', String(topicId))
       queryParams.set('mode', examMode)
+      queryParams.set('random', isRandom ? '1' : '0')
 
       navigate(`/exam/${examId}?${queryParams.toString()}`)
     } catch (err: any) {
@@ -420,6 +424,48 @@ export default function SelectExam() {
               </div>
             </div>
           )}
+
+          {/* Random Questions & Choices Option */}
+          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                isRandom ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'bg-slate-100 text-slate-500'
+              }`}>
+                <Shuffle size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-bold text-slate-900">
+                    สุ่มลำดับคำถามและตัวเลือก (Random Shuffle)
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isRandom ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {isRandom ? 'เปิดใช้งาน' : 'เรียงตามปกติ'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  สลับข้อสอบและตัวเลือก ก-ง แบบสุ่มทุกรอบสอบ (เลขข้อจะรัน 1, 2, 3... ตามปกติ)
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <button
+              type="button"
+              onClick={() => setIsRandom(!isRandom)}
+              className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer self-start sm:self-auto flex items-center ${
+                isRandom ? 'bg-indigo-600' : 'bg-slate-300'
+              }`}
+              title={isRandom ? 'ปิดการสุ่ม' : 'เปิดการสุ่ม'}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${
+                  isRandom ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Scope Switch Tabs */}
@@ -768,6 +814,13 @@ export default function SelectExam() {
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                               <BookOpen size={11} className="flex-shrink-0" />
                               <span>รวมทั้งหมด</span>
+                            </span>
+                          )}
+
+                          {att.is_random && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                              <Shuffle size={10} />
+                              <span>สุ่มโจทย์</span>
                             </span>
                           )}
                         </div>

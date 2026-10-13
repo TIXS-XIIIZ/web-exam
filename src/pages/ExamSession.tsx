@@ -13,9 +13,25 @@ import {
   Layers, 
   Loader2,
   AlertCircle,
-  Clock
+  Clock,
+  Shuffle
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
+
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 10000
+  return x - Math.floor(x)
+}
+
+function shuffleWithSeed<T>(array: T[], seed: number): T[] {
+  const result = [...array]
+  let currentSeed = seed
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(currentSeed++) * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
 
 type Choice = {
   id: number
@@ -63,6 +79,7 @@ export default function ExamSession() {
   const [remainingSeconds, setRemainingSeconds] = useState<number>(10800)
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
   const [isTimeUpModal, setIsTimeUpModal] = useState<boolean>(false)
+  const [isRandom, setIsRandom] = useState<boolean>(false)
 
   // Tracking per-question time refs
   const questionStartTimeRef = useRef<number>(Date.now())
@@ -77,7 +94,7 @@ export default function ExamSession() {
         // 0. Fetch Attempt details
         const { data: attemptData } = await supabase
           .from('exam_attempts')
-          .select('id, exam_mode, time_limit_seconds, started_at, status')
+          .select('id, exam_mode, time_limit_seconds, is_random, started_at, status')
           .eq('id', attemptId)
           .single()
 
@@ -92,6 +109,9 @@ export default function ExamSession() {
           setExamMode(mode)
           const limit = attemptData.time_limit_seconds || 10800
           setTimeLimitSeconds(limit)
+
+          const randomFlag = attemptData.is_random ?? (searchParams.get('random') === '1')
+          setIsRandom(randomFlag)
 
           const startedMs = attemptData.started_at ? new Date(attemptData.started_at).getTime() : Date.now()
           const currentElapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
@@ -142,7 +162,7 @@ export default function ExamSession() {
 
         if (qError) throw qError
 
-        const formattedQuestions = qData?.map((q: any) => ({
+        let formattedQuestions = qData?.map((q: any) => ({
           ...q,
           question_text: cleanThaiText(q.question_text),
           explanation: cleanThaiText(q.explanation),
@@ -153,6 +173,22 @@ export default function ExamSession() {
             }))
             .sort((a: any, b: any) => a.order_index - b.order_index),
         })) || []
+
+        const shouldRandomize = attemptData?.is_random ?? (searchParams.get('random') === '1')
+        if (shouldRandomize && attemptId) {
+          const baseSeed = Number(attemptId) || 12345
+          // 1. Shuffle questions
+          formattedQuestions = shuffleWithSeed(formattedQuestions, baseSeed)
+
+          // 2. Shuffle choices within each question
+          formattedQuestions = formattedQuestions.map((q: any, qIdx: number) => {
+            const choiceSeed = baseSeed + q.id * 31 + qIdx * 17
+            return {
+              ...q,
+              choices: shuffleWithSeed(q.choices, choiceSeed),
+            }
+          })
+        }
 
         setQuestions(formattedQuestions)
 
@@ -316,9 +352,13 @@ export default function ExamSession() {
         })
         .eq('id', attemptId)
 
-      const targetUrl = topicId 
-        ? `/result/${attemptId}?topicId=${topicId}${isTimeout ? '&timeup=1' : ''}`
-        : `/result/${attemptId}${isTimeout ? '?timeup=1' : ''}`
+      const queryParams = new URLSearchParams()
+      if (topicId) queryParams.set('topicId', String(topicId))
+      if (isTimeout) queryParams.set('timeup', '1')
+      if (isRandom) queryParams.set('random', '1')
+
+      const queryString = queryParams.toString()
+      const targetUrl = queryString ? `/result/${attemptId}?${queryString}` : `/result/${attemptId}`
 
       navigate(targetUrl)
     } catch (err) {
@@ -475,6 +515,12 @@ export default function ExamSession() {
                 <span className="truncate">{currentQ.topics?.name || 'หมวดความรู้ทั่วไปเกี่ยวกับนิติกร'}</span>
               </div>
               <div className="flex items-center gap-2">
+                {isRandom && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 flex items-center gap-1">
+                    <Shuffle size={11} />
+                    <span>สุ่มโจทย์</span>
+                  </span>
+                )}
                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
                   ข้อที่ {currentIndex + 1}
                 </span>

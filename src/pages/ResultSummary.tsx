@@ -24,9 +24,25 @@ import {
   ChevronDown,
   ChevronUp,
   Lightbulb,
-  CheckCircle
+  CheckCircle,
+  Shuffle
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
+
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 10000
+  return x - Math.floor(x)
+}
+
+function shuffleWithSeed<T>(array: T[], seed: number): T[] {
+  const result = [...array]
+  let currentSeed = seed
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(currentSeed++) * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
 
 type TopicStat = {
   name: string
@@ -65,6 +81,7 @@ export default function ResultSummary() {
   const [examId, setExamId] = useState<number | null>(null)
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('practice')
   const [timeLimitSeconds, setTimeLimitSeconds] = useState<number>(10800)
+  const [isRandom, setIsRandom] = useState<boolean>(false)
   const [activeTopicId, setActiveTopicId] = useState<number | null>(topicIdParam ? Number(topicIdParam) : null)
   const [singleTopicName, setSingleTopicName] = useState<string | null>(null)
   const [score, setScore] = useState({ total: 0, correct: 0, wrong: 0 })
@@ -88,7 +105,7 @@ export default function ResultSummary() {
         const { data: attempt, error } = await supabase
           .from('exam_attempts')
           .select(`
-            id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, started_at, finished_at,
+            id, exam_id, topic_id, custom_title, exam_mode, time_limit_seconds, time_spent_seconds, is_random, started_at, finished_at,
             exams (id, title, passing_score),
             topics (id, name),
             exam_attempt_answers (
@@ -120,6 +137,9 @@ export default function ResultSummary() {
         setExamMode(mode)
         setTimeLimitSeconds(attempt.time_limit_seconds || 10800)
 
+        const randomFlag = attempt.is_random ?? (searchParams.get('random') === '1')
+        setIsRandom(randomFlag)
+
         // Time spent
         let seconds = attempt.time_spent_seconds || 0
         if (!seconds && attempt.started_at && attempt.finished_at) {
@@ -134,7 +154,7 @@ export default function ResultSummary() {
         let correctCount = 0
         const tStats: Record<string, TopicStat> = {}
         let detectedTopicId: number | null = null
-        const reviews: QuestionReviewItem[] = []
+        let reviews: QuestionReviewItem[] = []
 
         answers.forEach((ans) => {
           if (ans.is_correct) correctCount++
@@ -174,8 +194,21 @@ export default function ResultSummary() {
           })
         })
 
-        // Sort reviews by orderIndex
-        reviews.sort((a, b) => a.orderIndex - b.orderIndex)
+        // If randomized in exam, recreate the exact shuffled order using attemptId seed
+        if (randomFlag && attemptId) {
+          const baseSeed = Number(attemptId) || 12345
+          reviews = shuffleWithSeed(reviews, baseSeed)
+          reviews = reviews.map((r, rIdx) => {
+            const choiceSeed = baseSeed + r.questionId * 31 + rIdx * 17
+            return {
+              ...r,
+              choices: shuffleWithSeed(r.choices, choiceSeed),
+            }
+          })
+        } else {
+          // Natural order
+          reviews.sort((a, b) => a.orderIndex - b.orderIndex)
+        }
         setQuestionReviews(reviews)
 
         const resolvedTopicId = attempt.topic_id || (topicIdParam ? Number(topicIdParam) : (Object.keys(tStats).length === 1 ? detectedTopicId : null))
@@ -229,6 +262,7 @@ export default function ResultSummary() {
         status: 'in_progress',
         exam_mode: examMode,
         time_limit_seconds: examMode === 'real_exam' ? timeLimitSeconds : null,
+        is_random: isRandom,
       }
       if (activeTopicId) {
         insertData.topic_id = activeTopicId
@@ -246,6 +280,7 @@ export default function ResultSummary() {
       queryParams.set('attemptId', String(newAttempt.id))
       if (activeTopicId) queryParams.set('topicId', String(activeTopicId))
       queryParams.set('mode', examMode)
+      if (isRandom) queryParams.set('random', '1')
 
       navigate(`/exam/${examId}?${queryParams.toString()}`)
     } catch (err: any) {
@@ -406,6 +441,13 @@ export default function ResultSummary() {
                   <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                     <Sparkles size={13} />
                     <span>ฝึกฝนปกติ</span>
+                  </span>
+                )}
+
+                {isRandom && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                    <Shuffle size={13} />
+                    <span>สุ่มโจทย์และตัวเลือก</span>
                   </span>
                 )}
 
@@ -848,7 +890,7 @@ export default function ResultSummary() {
 
             {/* Questions List */}
             <div className="space-y-3">
-              {filteredReviews.map((item) => {
+              {filteredReviews.map((item, idx) => {
                 const isExpanded = expandedQuestionId === item.questionId
                 return (
                   <div
@@ -869,7 +911,7 @@ export default function ResultSummary() {
                               : 'bg-rose-100 text-rose-800 border border-rose-300'
                           }`}
                         >
-                          {item.orderIndex + 1}
+                          {idx + 1}
                         </span>
 
                         <div className="min-w-0">
