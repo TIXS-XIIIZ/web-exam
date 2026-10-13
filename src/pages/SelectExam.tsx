@@ -20,7 +20,9 @@ import {
   X,
   Lightbulb,
   Shuffle,
-  Trash2
+  Trash2,
+  Plus,
+  SlidersHorizontal
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
@@ -32,13 +34,21 @@ export default function SelectExam() {
   const [recentAttempts, setRecentAttempts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [startingId, setStartingId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'all' | 'topics'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'topics' | 'custom'>('all')
   const [editingAttemptId, setEditingAttemptId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [deletingAttemptId, setDeletingAttemptId] = useState<number | null>(null)
   const [isClearingAll, setIsClearingAll] = useState<boolean>(false)
+
+  // Custom Exam Sets (User picked topics)
+  const [customExamSets, setCustomExamSets] = useState<any[]>([])
+  const [showCreateCustomModal, setShowCreateCustomModal] = useState<boolean>(false)
+  const [customSetTitle, setCustomSetTitle] = useState<string>('')
+  const [selectedTopicIds, setSelectedTopicIds] = useState<number[]>([])
+  const [isSavingCustomSet, setIsSavingCustomSet] = useState<boolean>(false)
+  const [deletingSetId, setDeletingSetId] = useState<number | null>(null)
 
   // Exam Mode, Time Setting, and Random state
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('real_exam')
@@ -75,7 +85,17 @@ export default function SelectExam() {
           setTopics(formattedTopics)
         }
 
-        // 3. Fetch user's recent attempts if logged in (with topic_id, custom_title, and topics name)
+        // 3. Fetch user's custom exam sets
+        if (currentUser) {
+          const { data: sets } = await supabase
+            .from('custom_exam_sets')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at', { ascending: false })
+          if (sets) setCustomExamSets(sets)
+        }
+
+        // 4. Fetch user's recent attempts if logged in (with topic_id, custom_title, and topics name)
         if (currentUser) {
           const { data: attempts } = await supabase
             .from('exam_attempts')
@@ -98,9 +118,9 @@ export default function SelectExam() {
     fetchData()
   }, [])
 
-  const handleStartExam = async (examId: number, topicId?: number) => {
+  const handleStartExam = async (examId: number, topicId?: number, customSet?: any) => {
     try {
-      const startKey = topicId ? `topic-${topicId}` : `exam-${examId}`
+      const startKey = customSet ? `custom-${customSet.id}` : topicId ? `topic-${topicId}` : `exam-${examId}`
       setStartingId(startKey)
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) return
@@ -116,7 +136,12 @@ export default function SelectExam() {
         time_limit_seconds: timeLimitSecs,
         is_random: isRandom,
       }
-      if (topicId) {
+
+      if (customSet) {
+        insertData.custom_set_id = customSet.id
+        insertData.topic_ids = customSet.topic_ids
+        insertData.custom_title = customSet.title
+      } else if (topicId) {
         insertData.topic_id = topicId
       }
 
@@ -143,6 +168,91 @@ export default function SelectExam() {
       toast.error(err.message, 'เกิดข้อผิดพลาด')
     } finally {
       setStartingId(null)
+    }
+  }
+
+  // Handle Create Custom Exam Set
+  const handleSaveCustomSet = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) {
+      toast.error('กรุณาเข้าสู่ระบบก่อนสร้างชุดข้อสอบ')
+      return
+    }
+
+    const trimmedTitle = customSetTitle.trim()
+    if (!trimmedTitle) {
+      toast.warning('กรุณาระบุชื่อชุดข้อสอบที่ต้องการสร้าง')
+      return
+    }
+
+    if (selectedTopicIds.length === 0) {
+      toast.warning('กรุณาเลือกอย่างน้อย 1 หมวดวิชา')
+      return
+    }
+
+    try {
+      setIsSavingCustomSet(true)
+      const primaryExam = exams[0] || { id: 1 }
+
+      // Calculate total question count for selected topics
+      const totalSelectedQuestions = topics
+        .filter((t) => selectedTopicIds.includes(t.id))
+        .reduce((sum, t) => sum + (t.questionCount || 0), 0)
+
+      const { data: newSet, error } = await supabase
+        .from('custom_exam_sets')
+        .insert({
+          user_id: user.id,
+          exam_id: primaryExam.id,
+          title: trimmedTitle,
+          topic_ids: selectedTopicIds,
+          total_questions: totalSelectedQuestions,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setCustomExamSets((prev) => [newSet, ...prev])
+      setShowCreateCustomModal(false)
+      setCustomSetTitle('')
+      setSelectedTopicIds([])
+      toast.success(`สร้างชุดข้อสอบ "${trimmedTitle}" (${totalSelectedQuestions} ข้อ) เรียบร้อยแล้ว`)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'ไม่สามารถสร้างชุดข้อสอบได้')
+    } finally {
+      setIsSavingCustomSet(false)
+    }
+  }
+
+  // Handle Delete Custom Exam Set
+  const handleDeleteCustomSet = async (setId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const ok = await confirm({
+      title: 'ยืนยันการลบชุดข้อสอบที่สร้างเอง?',
+      message: 'คุณต้องการลบชุดข้อสอบนี้ใช่หรือไม่? ข้อมูลประวัติการสอบที่เคยทำในชุดนี้จะยังคงอยู่',
+      confirmText: 'ลบชุดข้อสอบนี้',
+      cancelText: 'ยกเลิก',
+      type: 'danger',
+    })
+    if (!ok) return
+
+    try {
+      setDeletingSetId(setId)
+      const { error } = await supabase
+        .from('custom_exam_sets')
+        .delete()
+        .eq('id', setId)
+
+      if (error) throw error
+
+      setCustomExamSets((prev) => prev.filter((s) => s.id !== setId))
+      toast.success('ลบชุดข้อสอบเรียบร้อยแล้ว')
+    } catch (err: any) {
+      toast.error(err.message || 'ไม่สามารถลบชุดข้อสอบได้')
+    } finally {
+      setDeletingSetId(null)
     }
   }
 
@@ -497,7 +607,7 @@ export default function SelectExam() {
 
         {/* Scope Switch Tabs */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 p-1.5 bg-slate-200/70 rounded-2xl w-full sm:w-fit">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 p-1.5 bg-slate-200/70 rounded-2xl w-full sm:w-fit flex-wrap">
             <button
               onClick={() => setActiveTab('all')}
               className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
@@ -518,10 +628,26 @@ export default function SelectExam() {
               }`}
             >
               <Filter size={16} />
-              <span>2. เลือกทำเฉพาะหมวด (แยกตามสาระวิชา)</span>
+              <span>2. เลือกทำเฉพาะหมวด</span>
               <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700 font-extrabold">
                 {topics.length} หมวด
               </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('custom')}
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'custom'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <SlidersHorizontal size={16} />
+              <span>2. จัดชุดข้อสอบเอง</span>
+              {customExamSets.length > 0 && (
+                <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-extrabold">
+                  {customExamSets.length} ชุด
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -622,7 +748,7 @@ export default function SelectExam() {
                   )
                 })}
               </div>
-            ) : (
+            ) : activeTab === 'topics' ? (
               /* TAB 2: SELECT SPECIFIC TOPIC */
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -683,6 +809,140 @@ export default function SelectExam() {
                     )
                   })}
                 </div>
+              </div>
+            ) : (
+              /* TAB 3: CUSTOM EXAM SETS (USER SELECTED TOPICS) */
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                      <span>ชุดข้อสอบที่จัดเอง</span>
+                      <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">
+                        เลือกหลายหมวดผสมกัน
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      สร้างชุดข้อสอบเฉพาะกิจโดยหยิบเลือกหมวดวิชาที่ต้องการมาผสมกัน บันทึกลงระบบไว้ฝึกซ้อมได้ตลอด
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCustomSetTitle('')
+                      setSelectedTopicIds([])
+                      setShowCreateCustomModal(true)
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all cursor-pointer flex-shrink-0"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                    <span>+ สร้างชุดข้อสอบใหม่</span>
+                  </button>
+                </div>
+
+                {customExamSets.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border-2 border-dashed border-slate-200 space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto shadow-inner">
+                      <SlidersHorizontal size={32} />
+                    </div>
+                    <div className="max-w-md mx-auto space-y-1.5">
+                      <h3 className="font-bold text-slate-800 text-base">ยังไม่มีชุดข้อสอบที่สร้างเอง</h3>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        คุณสามารถหยิบเลือกหมวดวิชา 2 หมวดขึ้นไปมารวมกันเป็นชุดฝึกเฉพาะตัว เช่น เน้นเฉพาะ พ.ร.บ. หรือเน้นวิชาความจำ
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCustomSetTitle('')
+                        setSelectedTopicIds([])
+                        setShowCreateCustomModal(true)
+                      }}
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <Plus size={15} />
+                      <span>คลิกเพื่อเริ่มสร้างชุดข้อสอบ</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {customExamSets.map((cSet) => {
+                      const isStarting = startingId === `custom-${cSet.id}`
+                      const setTopicIds: number[] = Array.isArray(cSet.topic_ids) ? cSet.topic_ids : []
+                      const selectedTopicsList = topics.filter((t) => setTopicIds.includes(t.id))
+                      const totalQuestions = selectedTopicsList.reduce((sum, t) => sum + (t.questionCount || 0), 0)
+
+                      return (
+                        <div
+                          key={cSet.id}
+                          className="group bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-purple-400 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between relative"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 flex items-center gap-1">
+                                <Layers size={11} />
+                                <span>{selectedTopicsList.length} หมวดวิชา</span>
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                  {totalQuestions} ข้อ
+                                </span>
+                                <button
+                                  onClick={(e) => handleDeleteCustomSet(cSet.id, e)}
+                                  disabled={deletingSetId === cSet.id}
+                                  className="p-1 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="ลบชุดข้อสอบนี้"
+                                >
+                                  {deletingSetId === cSet.id ? (
+                                    <Loader2 size={14} className="animate-spin text-rose-500" />
+                                  ) : (
+                                    <Trash2 size={14} />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            <h3 className="font-bold text-slate-900 text-base mb-2 group-hover:text-purple-600 transition-colors leading-snug">
+                              {cSet.title}
+                            </h3>
+
+                            {/* Tags of selected topics */}
+                            <div className="flex flex-wrap gap-1.5 mb-4">
+                              {selectedTopicsList.map((t) => (
+                                <span
+                                  key={t.id}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-medium truncate max-w-[200px]"
+                                >
+                                  {t.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleStartExam(primaryExam.id, undefined, cSet)}
+                            disabled={isStarting}
+                            className={`mt-2 w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-bold text-xs active:scale-95 transition-all duration-200 cursor-pointer disabled:opacity-70 ${
+                              examMode === 'real_exam'
+                                ? 'bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 hover:border-amber-600 shadow-sm hover:shadow-amber-600/20'
+                                : 'bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 hover:border-purple-600 shadow-sm hover:shadow-purple-600/20'
+                            }`}
+                          >
+                            {isStarting ? (
+                              <Loader2 size={15} className="animate-spin" />
+                            ) : (
+                              <>
+                                <span>
+                                  {examMode === 'real_exam'
+                                    ? `สอบจริงชุดนี้ (${timeLimitMinutes} น.)`
+                                    : `เริ่มทำชุดนี้ (${totalQuestions} ข้อ)`}
+                                </span>
+                                <ChevronRight size={15} />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -990,6 +1250,160 @@ export default function SelectExam() {
                 ปิดหน้าต่าง
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create Custom Exam Set Dialog */}
+      {showCreateCustomModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col animate-modal overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-purple-50/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-inner">
+                  <SlidersHorizontal size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base sm:text-lg">
+                    จัดชุดข้อสอบด้วยตัวเอง
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    เลือกหมวดวิชาที่ต้องการฝึกฝนผสมกัน บันทึกเก็บไว้ฝึกซ้อมได้ตลอด
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateCustomModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="ปิด"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveCustomSet} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
+                {/* 1. Title Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>ตั้งชื่อชุดข้อสอบ: *</span>
+                    <span className="text-[11px] text-slate-400 font-normal">เช่น ชุดติวเข้ม พ.ร.บ.</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customSetTitle}
+                    onChange={(e) => setCustomSetTitle(e.target.value)}
+                    placeholder="เช่น ชุดเน้นกฎหมายวิธีปฏิบัติราชการทางปกครอง และระเบียบกลาง"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-xs sm:text-sm text-slate-900 bg-white"
+                  />
+                </div>
+
+                {/* 2. Select Topics List */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">
+                      เลือกหมวดวิชาที่ต้องการรวม ({selectedTopicIds.length}/{topics.length} หมวด):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTopicIds(topics.map((t) => t.id))}
+                        className="text-[11px] font-bold text-purple-600 hover:underline cursor-pointer"
+                      >
+                        เลือกทั้งหมด
+                      </button>
+                      <span className="text-slate-300">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTopicIds([])}
+                        className="text-[11px] font-bold text-slate-400 hover:underline cursor-pointer"
+                      >
+                        ล้างที่เลือก
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {topics.map((topic, i) => {
+                      const isChecked = selectedTopicIds.includes(topic.id)
+                      return (
+                        <div
+                          key={topic.id}
+                          onClick={() => {
+                            setSelectedTopicIds((prev) =>
+                              isChecked ? prev.filter((id) => id !== topic.id) : [...prev, topic.id]
+                            )
+                          }}
+                          className={`p-3 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-purple-50/80 border-purple-400 text-purple-950 shadow-sm'
+                              : 'bg-slate-50/60 hover:bg-slate-100/80 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${
+                              isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300 bg-white'
+                            }`}>
+                              {isChecked && <Check size={12} strokeWidth={3} />}
+                            </div>
+                            <span className="text-xs font-medium truncate">
+                              {i + 1}. {topic.name}
+                            </span>
+                          </div>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                            isChecked ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {topic.questionCount} ข้อ
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Summary Pill */}
+                <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200/80 flex items-center justify-between text-xs text-purple-950">
+                  <span className="font-medium">สรุปจำนวนข้อสอบในชุดนี้:</span>
+                  <span className="font-extrabold text-sm text-purple-700">
+                    {topics
+                      .filter((t) => selectedTopicIds.includes(t.id))
+                      .reduce((sum, t) => sum + (t.questionCount || 0), 0)}{' '}
+                    ข้อ
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCustomModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm cursor-pointer transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCustomSet || selectedTopicIds.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {isSavingCustomSet ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>กำลังบันทึก...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      <span>บันทึกชุดข้อสอบ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -106,10 +106,11 @@ export default function ExamSession() {
         // 0. Fetch Attempt details
         const { data: attemptData } = await supabase
           .from('exam_attempts')
-          .select('id, exam_mode, time_limit_seconds, remaining_seconds, time_spent_seconds, is_random, started_at, status')
+          .select('id, exam_mode, time_limit_seconds, remaining_seconds, time_spent_seconds, is_random, started_at, status, topic_id, topic_ids, custom_title')
           .eq('id', attemptId)
           .single()
 
+        let attemptTopicIds: number[] = []
         if (attemptData) {
           if (attemptData.status === 'completed') {
             const redirectUrl = topicId ? `/result/${attemptId}?topicId=${topicId}` : `/result/${attemptId}`
@@ -141,6 +142,10 @@ export default function ExamSession() {
           if (attemptData.status === 'paused') {
             setIsPaused(true)
           }
+
+          if (attemptData.topic_ids && Array.isArray(attemptData.topic_ids) && attemptData.topic_ids.length > 0) {
+            attemptTopicIds = attemptData.topic_ids.map(Number)
+          }
         }
 
         // 1. Fetch Exam info and optional Topic info
@@ -151,7 +156,9 @@ export default function ExamSession() {
           .single()
 
         let currentTopicName = ''
-        if (topicId) {
+        if (attemptData?.custom_title) {
+          currentTopicName = attemptData.custom_title
+        } else if (topicId) {
           const { data: topicData } = await supabase
             .from('topics')
             .select('name')
@@ -184,7 +191,9 @@ export default function ExamSession() {
             `)
             .eq('exam_id', examId)
 
-          if (topicId) {
+          if (attemptTopicIds.length > 0) {
+            chunkQuery = chunkQuery.in('topic_id', attemptTopicIds)
+          } else if (topicId) {
             chunkQuery = chunkQuery.eq('topic_id', topicId)
           }
 
