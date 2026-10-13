@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { 
   Trophy, 
@@ -24,10 +24,13 @@ type TopicStat = {
 
 export default function ResultSummary() {
   const { attemptId } = useParams()
+  const [searchParams] = useSearchParams()
+  const topicIdParam = searchParams.get('topicId')
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [examTitle, setExamTitle] = useState('')
   const [examId, setExamId] = useState<number | null>(null)
+  const [activeTopicId, setActiveTopicId] = useState<number | null>(topicIdParam ? Number(topicIdParam) : null)
   const [score, setScore] = useState({ total: 0, correct: 0, wrong: 0 })
   const [timeSpent, setTimeSpent] = useState<number>(0)
   const [topicStats, setTopicStats] = useState<TopicStat[]>([])
@@ -54,7 +57,6 @@ export default function ResultSummary() {
         if (error || !attempt) throw error
 
         const examData = attempt.exams as any
-        setExamTitle(examData?.title || 'ผลการสอบ')
         setExamId(examData?.id || null)
 
         // Time spent
@@ -70,17 +72,32 @@ export default function ResultSummary() {
         const answers = (attempt.exam_attempt_answers as any[]) || []
         let correctCount = 0
         const tStats: Record<string, TopicStat> = {}
+        let detectedTopicId: number | null = null
 
         answers.forEach((ans) => {
           if (ans.is_correct) correctCount++
 
           const topicName = ans.questions?.topics?.name || 'ความรู้ทั่วไป'
+          if (ans.questions?.topic_id) {
+            detectedTopicId = ans.questions.topic_id
+          }
+
           if (!tStats[topicName]) {
             tStats[topicName] = { name: topicName, total: 0, correct: 0 }
           }
           tStats[topicName].total++
           if (ans.is_correct) tStats[topicName].correct++
         })
+
+        const resolvedTopicId = topicIdParam ? Number(topicIdParam) : (Object.keys(tStats).length === 1 ? detectedTopicId : null)
+        setActiveTopicId(resolvedTopicId)
+
+        if (resolvedTopicId && Object.keys(tStats).length === 1) {
+          const singleTopicName = Object.keys(tStats)[0]
+          setExamTitle(`สรุปผลหมวด: ${singleTopicName}`)
+        } else {
+          setExamTitle(examData?.title || 'ผลการสอบรวม')
+        }
 
         setScore({
           total: answers.length,
@@ -104,7 +121,7 @@ export default function ResultSummary() {
     }
 
     fetchResult()
-  }, [attemptId])
+  }, [attemptId, topicIdParam])
 
   const handleRetake = async () => {
     if (!examId) return
@@ -124,7 +141,11 @@ export default function ResultSummary() {
         .single()
 
       if (error) throw error
-      navigate(`/exam/${examId}?attemptId=${newAttempt.id}`)
+      const targetUrl = activeTopicId
+        ? `/exam/${examId}?attemptId=${newAttempt.id}&topicId=${activeTopicId}`
+        : `/exam/${examId}?attemptId=${newAttempt.id}`
+
+      navigate(targetUrl)
     } catch (err: any) {
       alert('ไม่สามารถเริ่มรอบใหม่ได้: ' + err.message)
       setRetaking(false)

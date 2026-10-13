@@ -43,6 +43,7 @@ export default function ExamSession() {
   const { examId } = useParams()
   const [searchParams] = useSearchParams()
   const attemptId = searchParams.get('attemptId')
+  const topicId = searchParams.get('topicId')
   const navigate = useNavigate()
 
   const [examTitle, setExamTitle] = useState('')
@@ -59,16 +60,33 @@ export default function ExamSession() {
       if (!examId || !attemptId) return
 
       try {
-        // 1. Fetch Exam info
+        // 1. Fetch Exam info and optional Topic info
         const { data: examData } = await supabase
           .from('exams')
           .select('title')
           .eq('id', examId)
           .single()
-        if (examData) setExamTitle(examData.title)
 
-        // 2. Fetch questions with choices and topic name
-        const { data: qData, error: qError } = await supabase
+        let currentTopicName = ''
+        if (topicId) {
+          const { data: topicData } = await supabase
+            .from('topics')
+            .select('name')
+            .eq('id', topicId)
+            .single()
+          if (topicData) {
+            currentTopicName = topicData.name
+          }
+        }
+
+        if (currentTopicName) {
+          setExamTitle(currentTopicName)
+        } else if (examData) {
+          setExamTitle(examData.title)
+        }
+
+        // 2. Fetch questions with choices and topic name (filtered by topic_id if provided)
+        let query = supabase
           .from('questions')
           .select(`
             id, question_text, explanation, order_index, topic_id,
@@ -76,7 +94,12 @@ export default function ExamSession() {
             choices (id, choice_text, is_correct, order_index)
           `)
           .eq('exam_id', examId)
-          .order('order_index', { ascending: true })
+
+        if (topicId) {
+          query = query.eq('topic_id', topicId)
+        }
+
+        const { data: qData, error: qError } = await query.order('order_index', { ascending: true })
 
         if (qError) throw qError
 
@@ -111,7 +134,7 @@ export default function ExamSession() {
     }
 
     fetchQuestions()
-  }, [examId, attemptId])
+  }, [examId, attemptId, topicId])
 
   const handleSelectAnswer = async (choiceId: number, isCorrect: boolean) => {
     const currentQ = questions[currentIndex]
@@ -150,7 +173,11 @@ export default function ExamSession() {
         })
         .eq('id', attemptId)
 
-      navigate(`/result/${attemptId}`)
+      const targetUrl = topicId 
+        ? `/result/${attemptId}?topicId=${topicId}`
+        : `/result/${attemptId}`
+
+      navigate(targetUrl)
     } catch (err) {
       console.error('Failed to finish exam:', err)
       alert('เกิดข้อผิดพลาดในการส่งข้อสอบ โปรดลองใหม่อีกครั้ง')
