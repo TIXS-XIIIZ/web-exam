@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { 
@@ -12,7 +12,8 @@ import {
   X, 
   Layers, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
 
@@ -56,11 +57,48 @@ export default function ExamSession() {
   const [showFinishModal, setShowFinishModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // Exam Mode and Timer States
+  const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('practice')
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState<number>(10800) // Default 3 hours (10,800s)
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(10800)
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
+  const [isTimeUpModal, setIsTimeUpModal] = useState<boolean>(false)
+
+  // Tracking per-question time refs
+  const questionStartTimeRef = useRef<number>(Date.now())
+  const questionTimesRef = useRef<Record<number, number>>({})
+  const answerRecordIdsRef = useRef<Record<number, number>>({})
+
   useEffect(() => {
     async function fetchQuestions() {
       if (!examId || !attemptId) return
 
       try {
+        // 0. Fetch Attempt details
+        const { data: attemptData } = await supabase
+          .from('exam_attempts')
+          .select('id, exam_mode, time_limit_seconds, started_at, status')
+          .eq('id', attemptId)
+          .single()
+
+        if (attemptData) {
+          if (attemptData.status === 'completed') {
+            const redirectUrl = topicId ? `/result/${attemptId}?topicId=${topicId}` : `/result/${attemptId}`
+            navigate(redirectUrl)
+            return
+          }
+
+          const mode = (attemptData.exam_mode as 'real_exam' | 'practice') || 'practice'
+          setExamMode(mode)
+          const limit = attemptData.time_limit_seconds || 10800
+          setTimeLimitSeconds(limit)
+
+          const startedMs = attemptData.started_at ? new Date(attemptData.started_at).getTime() : Date.now()
+          const currentElapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
+          setElapsedSeconds(currentElapsed)
+          setRemainingSeconds(Math.max(0, limit - currentElapsed))
+        }
+
         // 1. Fetch Exam info and optional Topic info
         const { data: examData } = await supabase
           .from('exams')
@@ -86,7 +124,7 @@ export default function ExamSession() {
           setExamTitle(examData.title)
         }
 
-        // 2. Fetch questions with choices and topic name (filtered by topic_id if provided)
+        // 2. Fetch questions with choices and topic name
         let query = supabase
           .from('questions')
           .select(`
@@ -118,7 +156,7 @@ export default function ExamSession() {
 
         setQuestions(formattedQuestions)
 
-        // 3. Fetch existing answers
+        // 3. Fetch existing answers and question time tracking
         const { data: aData } = await supabase
           .from('exam_attempt_answers')
           .select('*')
@@ -126,14 +164,25 @@ export default function ExamSession() {
 
         if (aData) {
           const existingAnswers: Record<number, AnswerState> = {}
+          const existingTimes: Record<number, number> = {}
+          const recordIds: Record<number, number> = {}
+
           aData.forEach((ans) => {
             existingAnswers[ans.question_id] = {
               selectedChoiceId: ans.selected_choice_id,
               isCorrect: ans.is_correct,
             }
+            recordIds[ans.question_id] = ans.id
+            if (ans.time_spent_seconds) {
+              existingTimes[ans.question_id] = ans.time_spent_seconds
+            }
           })
           setAnswers(existingAnswers)
+          answerRecordIdsRef.current = recordIds
+          questionTimesRef.current = existingTimes
         }
+
+        questionStartTimeRef.current = Date.now()
       } catch (err) {
         console.error('Error fetching exam session data:', err)
       } finally {
@@ -142,35 +191,120 @@ export default function ExamSession() {
     }
 
     fetchQuestions()
-  }, [examId, attemptId, topicId])
+  }, [examId, attemptId, topicId, navigate])
+
+  // Timer Tick Interval
+  useEffect(() => {
+    if (loading || submitting || isTimeUpModal) return
+
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1)
+
+      if (examMode === 'real_exam') {
+        setRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer)
+            handleAutoSubmit()
+            return 0
+          }
+          return prev - 1
+        })
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [loading, submitting, isTimeUpModal, examMode])
+
+  // Helper to accumulate time on current question
+  const flushCurrentQuestionTime = () => {
+    const currentQ = questions[currentIndex]
+    if (!currentQ) return
+    const now = Date.now()
+    const deltaSec = Math.max(1, Math.round((now - questionStartTimeRef.current) / 1000))
+    questionStartTimeRef.current = now
+    const totalQTime = (questionTimesRef.current[currentQ.id] || 0) + deltaSec
+    questionTimesRef.current[currentQ.id] = totalQTime
+
+    // Sync to database if row exists
+    const recordId = answerRecordIdsRef.current[currentQ.id]
+    if (recordId) {
+      supabase
+        .from('exam_attempt_answers')
+        .update({ time_spent_seconds: totalQTime })
+        .eq('id', recordId)
+        .then()
+    }
+  }
+
+  const handleNavigateQuestion = (newIndex: number) => {
+    flushCurrentQuestionTime()
+    setCurrentIndex(newIndex)
+  }
 
   const handleSelectAnswer = async (choiceId: number, isCorrect: boolean) => {
     const currentQ = questions[currentIndex]
     if (!currentQ) return
 
-    // If already answered, do not allow changes (instant review mode)
-    if (answers[currentQ.id]?.selectedChoiceId) return
+    // In practice mode, lock answer once selected (instant review)
+    if (examMode === 'practice' && answers[currentQ.id]?.selectedChoiceId) return
+
+    // Accumulate question time
+    const now = Date.now()
+    const deltaSec = Math.max(1, Math.round((now - questionStartTimeRef.current) / 1000))
+    questionStartTimeRef.current = now
+    const totalQTime = (questionTimesRef.current[currentQ.id] || 0) + deltaSec
+    questionTimesRef.current[currentQ.id] = totalQTime
 
     const newAnswerState = { selectedChoiceId: choiceId, isCorrect }
     setAnswers((prev) => ({ ...prev, [currentQ.id]: newAnswerState }))
 
     try {
-      await supabase.from('exam_attempt_answers').insert({
-        attempt_id: Number(attemptId),
-        question_id: currentQ.id,
-        selected_choice_id: choiceId,
-        is_correct: isCorrect,
-      })
+      const existingRecordId = answerRecordIdsRef.current[currentQ.id]
+      if (existingRecordId) {
+        // Update existing answer
+        await supabase
+          .from('exam_attempt_answers')
+          .update({
+            selected_choice_id: choiceId,
+            is_correct: isCorrect,
+            time_spent_seconds: totalQTime,
+          })
+          .eq('id', existingRecordId)
+      } else {
+        // Insert new answer
+        const { data: inserted } = await supabase
+          .from('exam_attempt_answers')
+          .insert({
+            attempt_id: Number(attemptId),
+            question_id: currentQ.id,
+            selected_choice_id: choiceId,
+            is_correct: isCorrect,
+            time_spent_seconds: totalQTime,
+          })
+          .select('id')
+          .single()
+
+        if (inserted?.id) {
+          answerRecordIdsRef.current[currentQ.id] = inserted.id
+        }
+      }
     } catch (err) {
       console.error('Failed to save answer:', err)
     }
   }
 
-  const handleConfirmFinish = async () => {
+  const submitExam = async (isTimeout: boolean) => {
     try {
       setSubmitting(true)
+      flushCurrentQuestionTime()
+
       // Calculate total score
       const correctCount = Object.values(answers).filter((a) => a.isCorrect).length
+
+      // Calculate total seconds spent
+      const totalSecondsSpent = examMode === 'real_exam'
+        ? (isTimeout ? timeLimitSeconds : Math.min(timeLimitSeconds, elapsedSeconds))
+        : elapsedSeconds
 
       await supabase
         .from('exam_attempts')
@@ -178,19 +312,40 @@ export default function ExamSession() {
           status: 'completed',
           finished_at: new Date().toISOString(),
           total_score: correctCount,
+          time_spent_seconds: totalSecondsSpent,
         })
         .eq('id', attemptId)
 
       const targetUrl = topicId 
-        ? `/result/${attemptId}?topicId=${topicId}`
-        : `/result/${attemptId}`
+        ? `/result/${attemptId}?topicId=${topicId}${isTimeout ? '&timeup=1' : ''}`
+        : `/result/${attemptId}${isTimeout ? '?timeup=1' : ''}`
 
       navigate(targetUrl)
     } catch (err) {
       console.error('Failed to finish exam:', err)
       alert('เกิดข้อผิดพลาดในการส่งข้อสอบ โปรดลองใหม่อีกครั้ง')
       setSubmitting(false)
+      setIsTimeUpModal(false)
     }
+  }
+
+  const handleConfirmFinish = async () => {
+    await submitExam(false)
+  }
+
+  const handleAutoSubmit = async () => {
+    setIsTimeUpModal(true)
+    await submitExam(true)
+  }
+
+  const formatTimer = (totalSec: number) => {
+    const h = Math.floor(totalSec / 3600)
+    const m = Math.floor((totalSec % 3600) / 60)
+    const s = totalSec % 60
+    if (h > 0) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    }
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
   // Answer statistics
@@ -252,6 +407,33 @@ export default function ExamSession() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Timer Badge */}
+            {examMode === 'real_exam' ? (
+              <div
+                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-mono text-xs font-bold border transition-colors ${
+                  remainingSeconds <= 600
+                    ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}
+                title={`เวลาสอบจริง คงเหลือ: ${formatTimer(remainingSeconds)}`}
+              >
+                <Clock size={14} className={remainingSeconds <= 600 ? 'text-rose-600' : 'text-amber-600'} />
+                <span>{formatTimer(remainingSeconds)}</span>
+                <span className="hidden md:inline font-sans text-[10px] text-amber-700 font-medium">
+                  {remainingSeconds <= 600 ? '(ใกล้หมดเวลา)' : '(สอบจริง)'}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-mono text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                title={`เวลาที่ใช้: ${formatTimer(elapsedSeconds)}`}
+              >
+                <Clock size={14} className="text-indigo-600" />
+                <span>{formatTimer(elapsedSeconds)}</span>
+                <span className="hidden md:inline font-sans text-[10px] text-slate-500">(ฝึกฝน)</span>
+              </div>
+            )}
+
             {/* Quick jump drawer button */}
             <button
               onClick={() => setShowDrawer(true)}
@@ -292,9 +474,16 @@ export default function ExamSession() {
                 <Layers size={13} className="flex-shrink-0" />
                 <span className="truncate">{currentQ.topics?.name || 'หมวดความรู้ทั่วไปเกี่ยวกับนิติกร'}</span>
               </div>
-              <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
-                ข้อที่ {currentIndex + 1}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
+                  ข้อที่ {currentIndex + 1}
+                </span>
+                {examMode === 'real_exam' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
+                    สอบจริง (เปลี่ยนคำตอบได้)
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Question Text */}
@@ -312,25 +501,38 @@ export default function ExamSession() {
                 let badgeStyle = 'bg-slate-100 text-slate-700 border-slate-300'
                 let icon = null
 
-                if (hasAnswered) {
-                  if (choice.is_correct) {
-                    stateStyle = 'bg-emerald-50/80 border-emerald-500 text-emerald-950 font-medium ring-2 ring-emerald-400/20'
-                    badgeStyle = 'bg-emerald-500 text-white border-emerald-600'
-                    icon = <CheckCircle2 className="text-emerald-600 flex-shrink-0" size={20} />
-                  } else if (isSelected && !choice.is_correct) {
-                    stateStyle = 'bg-rose-50/80 border-rose-500 text-rose-950 ring-2 ring-rose-400/20'
-                    badgeStyle = 'bg-rose-500 text-white border-rose-600'
-                    icon = <XCircle className="text-rose-600 flex-shrink-0" size={20} />
+                if (examMode === 'real_exam') {
+                  // Real Exam: neutral selection styling (no right/wrong reveals)
+                  if (isSelected) {
+                    stateStyle = 'bg-indigo-50/90 border-indigo-600 text-indigo-950 font-medium ring-2 ring-indigo-500/20 shadow-sm'
+                    badgeStyle = 'bg-indigo-600 text-white border-indigo-600'
+                    icon = <CheckCircle2 className="text-indigo-600 flex-shrink-0" size={20} />
                   } else {
-                    stateStyle = 'bg-slate-50/50 border-slate-200 text-slate-400 opacity-60'
-                    badgeStyle = 'bg-slate-100 text-slate-400 border-slate-200'
+                    stateStyle = 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50/70 text-slate-800'
+                    badgeStyle = 'bg-slate-100 text-slate-700 border-slate-300'
+                  }
+                } else {
+                  // Practice Mode: Instant feedback
+                  if (hasAnswered) {
+                    if (choice.is_correct) {
+                      stateStyle = 'bg-emerald-50/80 border-emerald-500 text-emerald-950 font-medium ring-2 ring-emerald-400/20'
+                      badgeStyle = 'bg-emerald-500 text-white border-emerald-600'
+                      icon = <CheckCircle2 className="text-emerald-600 flex-shrink-0" size={20} />
+                    } else if (isSelected && !choice.is_correct) {
+                      stateStyle = 'bg-rose-50/80 border-rose-500 text-rose-950 ring-2 ring-rose-400/20'
+                      badgeStyle = 'bg-rose-500 text-white border-rose-600'
+                      icon = <XCircle className="text-rose-600 flex-shrink-0" size={20} />
+                    } else {
+                      stateStyle = 'bg-slate-50/50 border-slate-200 text-slate-400 opacity-60'
+                      badgeStyle = 'bg-slate-100 text-slate-400 border-slate-200'
+                    }
                   }
                 }
 
                 return (
                   <button
                     key={choice.id}
-                    disabled={hasAnswered}
+                    disabled={examMode === 'practice' && hasAnswered}
                     onClick={() => handleSelectAnswer(choice.id, choice.is_correct)}
                     className={`w-full text-left p-3.5 sm:p-4.5 rounded-xl sm:rounded-2xl border transition-all duration-200 flex items-start justify-between gap-2.5 sm:gap-3 ${stateStyle} disabled:cursor-default cursor-pointer active:scale-[0.99]`}
                   >
@@ -348,8 +550,8 @@ export default function ExamSession() {
               })}
             </div>
 
-            {/* Instant Feedback Explanation Box */}
-            {hasAnswered && currentQ.explanation && (
+            {/* Instant Feedback Explanation Box (Visible only in Practice Mode) */}
+            {examMode === 'practice' && hasAnswered && currentQ.explanation && (
               <div className="mt-6 sm:mt-8 p-4 sm:p-5 rounded-2xl bg-emerald-50/90 border border-emerald-300 text-emerald-950 space-y-2 animate-in fade-in duration-300 shadow-sm shadow-emerald-500/5">
                 <div className="flex items-center gap-2 font-bold text-emerald-900 text-xs sm:text-sm">
                   <Lightbulb size={18} className="text-emerald-600 flex-shrink-0" />
@@ -369,7 +571,7 @@ export default function ExamSession() {
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <button
             disabled={currentIndex === 0}
-            onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+            onClick={() => handleNavigateQuestion(Math.max(0, currentIndex - 1))}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-3.5 sm:px-6 py-2.5 sm:py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
           >
             <ChevronLeft size={18} />
@@ -378,7 +580,10 @@ export default function ExamSession() {
 
           {/* Center question jump pill */}
           <button
-            onClick={() => setShowDrawer(true)}
+            onClick={() => {
+              flushCurrentQuestionTime()
+              setShowDrawer(true)
+            }}
             className="px-3 sm:px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all flex-shrink-0"
             title="ดูสารบัญข้อสอบทั้งหมด"
           >
@@ -388,7 +593,7 @@ export default function ExamSession() {
 
           <button
             disabled={currentIndex === questions.length - 1}
-            onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
+            onClick={() => handleNavigateQuestion(Math.min(questions.length - 1, currentIndex + 1))}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-1.5 px-4 sm:px-7 py-2.5 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-md shadow-indigo-600/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <span>ถัดไป</span>
@@ -423,18 +628,33 @@ export default function ExamSession() {
 
             {/* Legend */}
             <div className="px-4 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-3 sm:gap-4 text-[11px] text-slate-600">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
-                <span>ตอบถูก</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-md bg-rose-500"></span>
-                <span>ตอบผิด</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
-                <span>ยังไม่ตอบ</span>
-              </div>
+              {examMode === 'real_exam' ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-md bg-indigo-600"></span>
+                    <span>ตอบแล้ว</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
+                    <span>ยังไม่ตอบ</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
+                    <span>ตอบถูก</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-md bg-rose-500"></span>
+                    <span>ตอบผิด</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
+                    <span>ยังไม่ตอบ</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Questions Grid */}
@@ -444,11 +664,17 @@ export default function ExamSession() {
                 const isCurrent = idx === currentIndex
 
                 let colorClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                if (ans) {
-                  if (ans.isCorrect) {
-                    colorClass = 'bg-emerald-500 text-white font-bold border-emerald-600'
-                  } else {
-                    colorClass = 'bg-rose-500 text-white font-bold border-rose-600'
+                if (examMode === 'real_exam') {
+                  if (ans?.selectedChoiceId) {
+                    colorClass = 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-sm'
+                  }
+                } else {
+                  if (ans) {
+                    if (ans.isCorrect) {
+                      colorClass = 'bg-emerald-500 text-white font-bold border-emerald-600'
+                    } else {
+                      colorClass = 'bg-rose-500 text-white font-bold border-rose-600'
+                    }
                   }
                 }
 
@@ -456,7 +682,7 @@ export default function ExamSession() {
                   <button
                     key={q.id}
                     onClick={() => {
-                      setCurrentIndex(idx)
+                      handleNavigateQuestion(idx)
                       setShowDrawer(false)
                     }}
                     className={`h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-semibold border flex items-center justify-center transition-all cursor-pointer ${colorClass} ${
@@ -489,7 +715,7 @@ export default function ExamSession() {
             <div className="text-center space-y-1.5">
               <h3 className="text-lg sm:text-xl font-bold text-slate-900">ยืนยันการส่งข้อสอบ?</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                ระบบจะคำนวณคะแนนรวมและวิเคราะห์จุดอ่อนของคุณทันที
+                ระบบจะคำนวณคะแนนรวม บันทึกความเร็วรายข้อ และสร้าง Dashboard วิเคราะห์ผลสอบให้คุณทันที
               </p>
             </div>
 
@@ -522,6 +748,27 @@ export default function ExamSession() {
                   <span>ยืนยันส่งข้อสอบ</span>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Up Fullscreen Modal */}
+      {isTimeUpModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto animate-bounce">
+              <Clock size={36} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-900">หมดเวลาทำข้อสอบแล้ว!</h3>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                เวลาสอบครบ {Math.round(timeLimitSeconds / 60)} นาทีแล้ว ระบบกำลังทำการบันทึกและส่งคำตอบของคุณโดยอัตโนมัติ...
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-indigo-600 text-xs font-semibold py-2">
+              <Loader2 size={18} className="animate-spin" />
+              <span>กำลังประมวลผลคะแนนและสร้าง Dashboard วิเคราะห์ผล...</span>
             </div>
           </div>
         </div>
