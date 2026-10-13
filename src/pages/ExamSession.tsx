@@ -342,12 +342,12 @@ export default function ExamSession() {
 
             {/* Instant Feedback Explanation Box */}
             {hasAnswered && currentQ.explanation && (
-              <div className="mt-8 p-5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-900 space-y-2 animate-in fade-in duration-300">
-                <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                  <Lightbulb size={18} className="text-amber-600 flex-shrink-0" />
+              <div className="mt-8 p-5 rounded-2xl bg-emerald-50/90 border border-emerald-300 text-emerald-950 space-y-2 animate-in fade-in duration-300 shadow-sm shadow-emerald-500/5">
+                <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                  <Lightbulb size={18} className="text-emerald-600 flex-shrink-0" />
                   <span>คำอธิบายและเฉลยข้อสอบ:</span>
                 </div>
-                <p className="text-xs sm:text-sm text-amber-950 leading-relaxed whitespace-pre-line pl-6">
+                <p className="text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed whitespace-pre-line pl-6">
                   {currentQ.explanation}
                 </p>
               </div>
