@@ -300,200 +300,161 @@ export default function SelectExam() {
         </div>
 
         {/* Mode Selector Card */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/90 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">1. เลือกลักษณะการสอบ</h2>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                เลือกระหว่าง "โหมดสอบจริง" จับเวลาถอยหลังจำลองสนามสอบจริง หรือ "โหมดฝึกฝน" พร้อมเฉลยทันที
-              </p>
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-sm space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">1. เลือกลักษณะการสอบ</h2>
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 w-fit">
-              {examMode === 'real_exam' ? `⏱️ โหมดสอบจริง (${timeLimitMinutes} นาที)` : '💡 โหมดฝึกฝน (ไม่จำกัดเวลา)'}
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700">
+              {examMode === 'real_exam' ? `⏱️ จับเวลา ${timeLimitMinutes} นาที` : '💡 ฝึกฝน ไม่จำกัดเวลา'}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             {/* Real Exam Mode */}
             <div
               onClick={() => setExamMode('real_exam')}
-              className={`p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between gap-3 ${
                 examMode === 'real_exam'
-                  ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+                  ? 'border-amber-500 bg-amber-50/50 shadow-sm'
                   : 'border-slate-200 hover:border-slate-300 bg-white'
               }`}
             >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex items-center gap-3">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold transition-colors ${
-                    examMode === 'real_exam' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    <Clock size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
-                      <span>โหมดสอบจริง</span>
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-                        จับเวลา
-                      </span>
-                    </h3>
-                    <span className="text-[11px] font-semibold text-indigo-700">
-                      จำลองสนามสอบจริง มีหมดเวลา
-                    </span>
-                  </div>
-                </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                  examMode === 'real_exam' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-colors ${
+                  examMode === 'real_exam' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-slate-100 text-slate-500'
                 }`}>
-                  {examMode === 'real_exam' && <Check size={12} strokeWidth={3} />}
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    สอบจริง (จับเวลา)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    ซ่อนเฉลย • ส่งเมื่อหมดเวลา
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed pl-14">
-                จับเวลาถอยหลัง <strong>{timeLimitMinutes} นาที</strong> (ค่าเริ่มต้น 3 ชม.) • ซ่อนเฉลยระหว่างทำ • หมดเวลาส่งอัตโนมัติ • มี Dashboard วิเคราะห์ความเร็วและจุดอ่อน
-              </p>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                examMode === 'real_exam' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'
+              }`}>
+                {examMode === 'real_exam' && <Check size={12} strokeWidth={3} />}
+              </div>
             </div>
 
             {/* Practice Mode */}
             <div
               onClick={() => setExamMode('practice')}
-              className={`p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+              className={`p-3.5 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between gap-3 ${
                 examMode === 'practice'
                   ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
                   : 'border-slate-200 hover:border-slate-300 bg-white'
               }`}
             >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex items-center gap-3">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold transition-colors ${
-                    examMode === 'practice' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    <Lightbulb size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
-                      <span>โหมดฝึกฝนปกติ</span>
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                        เฉลยทันที
-                      </span>
-                    </h3>
-                    <span className="text-[11px] font-semibold text-emerald-700">
-                      ทำได้เรื่อยๆ ไม่มีหมดเวลา
-                    </span>
-                  </div>
-                </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                  examMode === 'practice' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-colors ${
+                  examMode === 'practice' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-100 text-slate-500'
                 }`}>
-                  {examMode === 'practice' && <Check size={12} strokeWidth={3} />}
+                  <Lightbulb size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    ฝึกฝนปกติ
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    เฉลยทันที • ไม่จำกัดเวลา
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed pl-14">
-                จับเวลาเดินหน้า • ตอบปุ๊บเฉลยปั๊บด้วยคำอธิบายสีเขียว • ไม่มีหมดเวลา • มี Dashboard วิเคราะห์ความเร็วและจุดอ่อนครบถ้วน
-              </p>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                examMode === 'practice' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+              }`}>
+                {examMode === 'practice' && <Check size={12} strokeWidth={3} />}
+              </div>
             </div>
           </div>
 
           {/* Time setting bar when Real Exam Mode is active */}
           {examMode === 'real_exam' && (
-            <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-3 animate-in fade-in duration-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-amber-700 flex-shrink-0" />
-                  <span className="text-xs sm:text-sm font-bold text-amber-950">
-                    ตั้งค่าเวลาสอบจริง:
-                  </span>
-                  <span className="text-xs font-bold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-lg">
-                    {timeLimitMinutes} นาที ({Math.floor(timeLimitMinutes / 60)} ชม.{timeLimitMinutes % 60 > 0 ? ` ${timeLimitMinutes % 60} นาที` : ''})
-                  </span>
-                </div>
-                <span className="text-[11px] text-amber-700 font-medium">
-                  * ค่ามาตรฐานการสอบนิติกรคือ 3 ชั่วโมง (180 นาที)
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {[
-                  { label: '60 นาที (1 ชม.)', value: 60 },
-                  { label: '120 นาที (2 ชม.)', value: 120 },
-                  { label: '180 นาที (3 ชม. ค่าเริ่มต้น)', value: 180 },
-                ].map((preset) => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    onClick={() => {
-                      setTimeLimitMinutes(preset.value)
-                      setIsCustomTime(false)
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      !isCustomTime && timeLimitMinutes === preset.value
-                        ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
-                        : 'bg-white hover:bg-amber-100/70 text-slate-700 border border-amber-200'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-
+            <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/90 flex flex-wrap items-center gap-2 animate-in fade-in duration-150">
+              <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5 mr-1">
+                <Clock size={14} className="text-amber-600" />
+                เวลาสอบ:
+              </span>
+              {[
+                { label: '1 ชม.', value: 60 },
+                { label: '2 ชม.', value: 120 },
+                { label: '3 ชม. (มาตรฐาน)', value: 180 },
+              ].map((preset) => (
                 <button
+                  key={preset.value}
                   type="button"
-                  onClick={() => setIsCustomTime(true)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isCustomTime
-                      ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
+                  onClick={() => {
+                    setTimeLimitMinutes(preset.value)
+                    setIsCustomTime(false)
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    !isCustomTime && timeLimitMinutes === preset.value
+                      ? 'bg-amber-600 text-white shadow-sm'
                       : 'bg-white hover:bg-amber-100/70 text-slate-700 border border-amber-200'
                   }`}
                 >
-                  กำหนดเวลาเอง
+                  {preset.label}
                 </button>
+              ))}
 
-                {isCustomTime && (
-                  <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-amber-300 shadow-inner">
-                    <input
-                      type="number"
-                      min="1"
-                      max="600"
-                      value={customMinutesInput}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setCustomMinutesInput(val)
-                        const num = parseInt(val)
-                        if (num > 0) setTimeLimitMinutes(num)
-                      }}
-                      placeholder="ระบุนาที"
-                      className="w-16 text-xs text-slate-900 font-bold focus:outline-none"
-                    />
-                    <span className="text-xs text-slate-500 font-medium">นาที</span>
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomTime(true)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  isCustomTime
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-amber-100/70 text-slate-700 border border-amber-200'
+                }`}
+              >
+                กำหนดเอง
+              </button>
+
+              {isCustomTime && (
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-amber-300">
+                  <input
+                    type="number"
+                    min="1"
+                    max="600"
+                    value={customMinutesInput}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setCustomMinutesInput(val)
+                      const num = parseInt(val)
+                      if (num > 0) setTimeLimitMinutes(num)
+                    }}
+                    placeholder="นาที"
+                    className="w-14 text-xs text-slate-900 font-bold focus:outline-none"
+                  />
+                  <span className="text-xs text-slate-500 font-medium">นาที</span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Random Questions & Choices Option */}
-          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                isRandom ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'bg-slate-100 text-slate-500'
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                isRandom ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'
               }`}>
-                <Shuffle size={18} />
+                <Shuffle size={15} />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs sm:text-sm font-bold text-slate-900">
-                    สุ่มลำดับคำถามและตัวเลือก (Random Shuffle)
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isRandom ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {isRandom ? 'เปิดใช้งาน' : 'เรียงตามปกติ'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  สลับข้อสอบและตัวเลือก ก-ง แบบสุ่มทุกรอบสอบ (เลขข้อจะรัน 1, 2, 3... ตามปกติ)
-                </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-800">
+                  สุ่มลำดับโจทย์และตัวเลือก
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  isRandom ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {isRandom ? 'เปิด' : 'ปิด'}
+                </span>
               </div>
             </div>
 
@@ -501,14 +462,14 @@ export default function SelectExam() {
             <button
               type="button"
               onClick={() => setIsRandom(!isRandom)}
-              className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer self-start sm:self-auto flex items-center ${
+              className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer flex items-center ${
                 isRandom ? 'bg-indigo-600' : 'bg-slate-300'
               }`}
               title={isRandom ? 'ปิดการสุ่ม' : 'เปิดการสุ่ม'}
             >
               <div
                 className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${
-                  isRandom ? 'translate-x-6' : 'translate-x-0'
+                  isRandom ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
