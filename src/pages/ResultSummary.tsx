@@ -116,10 +116,10 @@ export default function ResultSummary() {
 
         if (error || !attempt) throw error
 
-        // Chunked pagination for all answers to exceed PostgREST 1000 rows limit
+        // Chunked pagination for all answers to exceed PostgREST limit (pageSize=500)
         let allAnswers: any[] = []
         let aFrom = 0
-        const pageSize = 1000
+        const pageSize = 500
         let aHasMore = true
 
         while (aHasMore) {

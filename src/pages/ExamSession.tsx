@@ -144,10 +144,10 @@ export default function ExamSession() {
           setExamTitle(examData.title)
         }
 
-        // 2. Fetch all questions with choices and topic name (chunked pagination to exceed Supabase 1000 row limit)
+        // 2. Fetch all questions with choices and topic name (chunked pagination with pageSize=500 to reliably exceed PostgREST limit)
         let allQuestionsRaw: any[] = []
         let qFrom = 0
-        const pageSize = 1000
+        const pageSize = 500
         let qHasMore = true
 
         while (qHasMore) {
@@ -212,7 +212,7 @@ export default function ExamSession() {
 
         setQuestions(formattedQuestions)
 
-        // 3. Fetch existing answers and question time tracking (chunked pagination)
+        // 3. Fetch existing answers and question time tracking (chunked pagination with pageSize=500)
         let allAnswersRaw: any[] = []
         let aFrom = 0
         let aHasMore = true
