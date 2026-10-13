@@ -14,6 +14,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
+import { cleanThaiText } from '../lib/formatThaiText'
 
 type Choice = {
   id: number
@@ -105,7 +106,14 @@ export default function ExamSession() {
 
         const formattedQuestions = qData?.map((q: any) => ({
           ...q,
-          choices: (q.choices || []).sort((a: any, b: any) => a.order_index - b.order_index),
+          question_text: cleanThaiText(q.question_text),
+          explanation: cleanThaiText(q.explanation),
+          choices: (q.choices || [])
+            .map((c: any) => ({
+              ...c,
+              choice_text: cleanThaiText(c.choice_text),
+            }))
+            .sort((a: any, b: any) => a.order_index - b.order_index),
         })) || []
 
         setQuestions(formattedQuestions)
