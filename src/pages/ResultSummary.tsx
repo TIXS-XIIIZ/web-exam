@@ -13,7 +13,11 @@ import {
   Target, 
   Layers, 
   Loader2,
-  Sparkles
+  Sparkles,
+  Pencil,
+  Check,
+  X,
+  BookOpen
 } from 'lucide-react'
 
 type TopicStat = {
@@ -31,10 +35,16 @@ export default function ResultSummary() {
   const [examTitle, setExamTitle] = useState('')
   const [examId, setExamId] = useState<number | null>(null)
   const [activeTopicId, setActiveTopicId] = useState<number | null>(topicIdParam ? Number(topicIdParam) : null)
+  const [singleTopicName, setSingleTopicName] = useState<string | null>(null)
   const [score, setScore] = useState({ total: 0, correct: 0, wrong: 0 })
   const [timeSpent, setTimeSpent] = useState<number>(0)
   const [topicStats, setTopicStats] = useState<TopicStat[]>([])
   const [retaking, setRetaking] = useState(false)
+
+  // Title editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [titleInput, setTitleInput] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
 
   useEffect(() => {
     async function fetchResult() {
@@ -44,8 +54,9 @@ export default function ResultSummary() {
         const { data: attempt, error } = await supabase
           .from('exam_attempts')
           .select(`
-            id, exam_id, time_spent_seconds, started_at, finished_at,
+            id, exam_id, topic_id, custom_title, time_spent_seconds, started_at, finished_at,
             exams (id, title, passing_score),
+            topics (id, name),
             exam_attempt_answers (
               is_correct,
               questions (topic_id, topics (name))
@@ -89,14 +100,18 @@ export default function ResultSummary() {
           if (ans.is_correct) tStats[topicName].correct++
         })
 
-        const resolvedTopicId = topicIdParam ? Number(topicIdParam) : (Object.keys(tStats).length === 1 ? detectedTopicId : null)
+        const resolvedTopicId = attempt.topic_id || (topicIdParam ? Number(topicIdParam) : (Object.keys(tStats).length === 1 ? detectedTopicId : null))
         setActiveTopicId(resolvedTopicId)
 
-        if (resolvedTopicId && Object.keys(tStats).length === 1) {
-          const singleTopicName = Object.keys(tStats)[0]
-          setExamTitle(`สรุปผลหมวด: ${singleTopicName}`)
+        const topicName = (attempt.topics as any)?.name || (resolvedTopicId && Object.keys(tStats).length === 1 ? Object.keys(tStats)[0] : null)
+        setSingleTopicName(topicName)
+
+        if (attempt.custom_title) {
+          setExamTitle(attempt.custom_title)
+        } else if (topicName) {
+          setExamTitle(`หมวด: ${topicName}`)
         } else {
-          setExamTitle(examData?.title || 'ผลการสอบรวม')
+          setExamTitle(examData?.title || 'ข้อสอบรวมทั้งหมด (1,050 ข้อ)')
         }
 
         setScore({
@@ -130,13 +145,18 @@ export default function ResultSummary() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
+      const insertData: any = {
+        exam_id: examId,
+        user_id: user.id,
+        status: 'in_progress',
+      }
+      if (activeTopicId) {
+        insertData.topic_id = activeTopicId
+      }
+
       const { data: newAttempt, error } = await supabase
         .from('exam_attempts')
-        .insert({
-          exam_id: examId,
-          user_id: user.id,
-          status: 'in_progress',
-        })
+        .insert(insertData)
         .select()
         .single()
 
@@ -149,6 +169,32 @@ export default function ResultSummary() {
     } catch (err: any) {
       alert('ไม่สามารถเริ่มรอบใหม่ได้: ' + err.message)
       setRetaking(false)
+    }
+  }
+
+  const handleSaveResultTitle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!attemptId || savingTitle) return
+
+    try {
+      setSavingTitle(true)
+      const cleanTitle = titleInput.trim()
+      const { error } = await supabase
+        .from('exam_attempts')
+        .update({ custom_title: cleanTitle || null })
+        .eq('id', attemptId)
+
+      if (error) {
+        alert('ไม่สามารถบันทึกชื่อได้: ' + error.message)
+        return
+      }
+
+      setExamTitle(cleanTitle || (singleTopicName ? `หมวด: ${singleTopicName}` : 'ข้อสอบรวมทั้งหมด'))
+      setIsEditingTitle(false)
+    } catch (err: any) {
+      alert('เกิดข้อผิดพลาด: ' + err.message)
+    } finally {
+      setSavingTitle(false)
     }
   }
 
@@ -195,14 +241,69 @@ export default function ResultSummary() {
               <Trophy size={32} />
             </div>
 
-            <div className="space-y-1">
-              <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">
-                <Sparkles size={13} />
-                สรุปผลการประเมิน
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {examTitle}
-              </h1>
+            <div className="space-y-2 max-w-xl w-full">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                  <Sparkles size={13} />
+                  สรุปผลการประเมิน
+                </span>
+                {singleTopicName ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <Layers size={13} />
+                    หมวด: {singleTopicName}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    <BookOpen size={13} />
+                    ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)
+                  </span>
+                )}
+              </div>
+
+              {isEditingTitle ? (
+                <form onSubmit={handleSaveResultTitle} className="flex items-center justify-center gap-2 max-w-md mx-auto pt-2">
+                  <input
+                    type="text"
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    placeholder="ระบุชื่อรอบสอบนี้..."
+                    autoFocus
+                    className="flex-1 text-sm px-3 py-2 rounded-xl border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingTitle}
+                    className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                    title="บันทึกชื่อ"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTitle(false)}
+                    className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                    title="ยกเลิก"
+                  >
+                    <X size={16} />
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center justify-center gap-2">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    {examTitle}
+                  </h1>
+                  <button
+                    onClick={() => {
+                      setTitleInput(examTitle)
+                      setIsEditingTitle(true)
+                    }}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                    title="เปลี่ยนชื่อรอบสอบนี้"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Score Big Display */}

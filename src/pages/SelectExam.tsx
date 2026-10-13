@@ -14,7 +14,10 @@ import {
   ChevronRight,
   Loader2,
   FolderOpen,
-  Filter
+  Filter,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react'
 
 export default function SelectExam() {
@@ -25,6 +28,9 @@ export default function SelectExam() {
   const [loading, setLoading] = useState(true)
   const [startingId, setStartingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'all' | 'topics'>('all')
+  const [editingAttemptId, setEditingAttemptId] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -53,14 +59,18 @@ export default function SelectExam() {
           setTopics(formattedTopics)
         }
 
-        // 3. Fetch user's recent attempts if logged in
+        // 3. Fetch user's recent attempts if logged in (with topic_id, custom_title, and topics name)
         if (currentUser) {
           const { data: attempts } = await supabase
             .from('exam_attempts')
-            .select('id, exam_id, status, total_score, started_at, finished_at, exams(title)')
+            .select(`
+              id, exam_id, topic_id, custom_title, status, total_score, started_at, finished_at,
+              exams (title),
+              topics (name)
+            `)
             .eq('user_id', currentUser.id)
             .order('started_at', { ascending: false })
-            .limit(5)
+            .limit(10)
           if (attempts) setRecentAttempts(attempts)
         }
       } catch (err) {
@@ -79,13 +89,18 @@ export default function SelectExam() {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) return
 
+      const insertData: any = {
+        exam_id: examId,
+        user_id: currentUser.id,
+        status: 'in_progress',
+      }
+      if (topicId) {
+        insertData.topic_id = topicId
+      }
+
       const { data: attempt, error } = await supabase
         .from('exam_attempts')
-        .insert({
-          exam_id: examId,
-          user_id: currentUser.id,
-          status: 'in_progress'
-        })
+        .insert(insertData)
         .select()
         .single()
 
@@ -104,6 +119,48 @@ export default function SelectExam() {
       alert('เกิดข้อผิดพลาด: ' + err.message)
     } finally {
       setStartingId(null)
+    }
+  }
+
+  const handleStartEdit = (att: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingAttemptId(att.id)
+    setEditingTitle(att.custom_title || (att.topic_id && att.topics?.name ? `หมวด: ${att.topics.name}` : (att.exams?.title || 'ทำข้อสอบรวมทั้งหมด')))
+  }
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingAttemptId(null)
+    setEditingTitle('')
+  }
+
+  const handleSaveTitle = async (attemptId: number, e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (savingTitle) return
+
+    try {
+      setSavingTitle(true)
+      const cleanTitle = editingTitle.trim()
+      const { error } = await supabase
+        .from('exam_attempts')
+        .update({ custom_title: cleanTitle || null })
+        .eq('id', attemptId)
+
+      if (error) {
+        alert('ไม่สามารถบันทึกชื่อได้: ' + error.message)
+        return
+      }
+
+      setRecentAttempts((prev) =>
+        prev.map((att) => (att.id === attemptId ? { ...att, custom_title: cleanTitle || null } : att))
+      )
+      setEditingAttemptId(null)
+      setEditingTitle('')
+    } catch (err: any) {
+      alert('เกิดข้อผิดพลาด: ' + err.message)
+    } finally {
+      setSavingTitle(false)
     }
   }
 
@@ -383,46 +440,133 @@ export default function SelectExam() {
             {/* Recent Exam Attempts Box */}
             {recentAttempts.length > 0 && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm">
-                <div className="flex items-center gap-2 text-slate-900 font-bold mb-4">
-                  <History size={18} className="text-indigo-600" />
-                  <h3>ประวัติการสอบล่าสุดของคุณ</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold">
+                    <History size={18} className="text-indigo-600" />
+                    <h3>ประวัติการสอบของคุณ</h3>
+                  </div>
+                  <span className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-md">
+                    {recentAttempts.length} รอบล่าสุด
+                  </span>
                 </div>
                 <div className="space-y-3">
                   {recentAttempts.map((att) => {
                     const isDone = att.status === 'completed'
+                    const isEditing = editingAttemptId === att.id
+                    const isSingleTopic = !!att.topic_id
+                    const topicName = att.topics?.name
+                    const defaultName = isSingleTopic 
+                      ? (topicName ? `หมวด: ${topicName}` : 'รายหมวดวิชา')
+                      : 'ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)'
+                    const displayName = att.custom_title || defaultName
+
                     return (
                       <div
                         key={att.id}
                         onClick={() => {
-                          if (isDone) navigate(`/result/${att.id}`)
-                          else navigate(`/exam/${att.exam_id}?attemptId=${att.id}`)
+                          if (isEditing) return
+                          if (isDone) {
+                            navigate(att.topic_id ? `/result/${att.id}?topicId=${att.topic_id}` : `/result/${att.id}`)
+                          } else {
+                            navigate(att.topic_id ? `/exam/${att.exam_id}?attemptId=${att.id}&topicId=${att.topic_id}` : `/exam/${att.exam_id}?attemptId=${att.id}`)
+                          }
                         }}
-                        className="group p-3 rounded-xl bg-slate-50 hover:bg-indigo-50/50 border border-slate-200/80 cursor-pointer transition-all flex items-center justify-between"
+                        className="group p-3.5 rounded-2xl bg-slate-50 hover:bg-indigo-50/40 border border-slate-200/80 hover:border-indigo-300 cursor-pointer transition-all space-y-2 relative"
                       >
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-slate-800 line-clamp-1 group-hover:text-indigo-600">
-                            {att.exams?.title || 'ข้อสอบ'}
+                        {/* Top Info Bar */}
+                        <div className="flex items-center justify-between gap-2">
+                          {isSingleTopic ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 border border-indigo-200 truncate max-w-[190px]">
+                              <Layers size={11} className="flex-shrink-0" />
+                              <span className="truncate">{topicName || 'รายหมวด'}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
+                              <BookOpen size={11} className="flex-shrink-0" />
+                              <span>ทำทั้งหมด (1,050 ข้อ)</span>
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              onClick={(e) => handleStartEdit(att, e)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-colors"
+                              title="เปลี่ยนชื่อประวัตินี้"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                isDone
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {isDone ? (att.total_score != null ? `${Number(att.total_score)} ข้อ` : 'ตรวจแล้ว') : 'ทำต่อ'}
+                            </span>
                           </div>
-                          <div className="text-[11px] text-slate-400">
+                        </div>
+
+                        {/* Title or Edit Input */}
+                        {isEditing ? (
+                          <form
+                            onSubmit={(e) => handleSaveTitle(att.id, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1.5 pt-1"
+                          >
+                            <input
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              placeholder="ระบุชื่อประวัตินี้..."
+                              autoFocus
+                              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
+                            />
+                            <button
+                              type="submit"
+                              disabled={savingTitle}
+                              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                              title="บันทึกชื่อ"
+                            >
+                              <Check size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEdit}
+                              className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                              title="ยกเลิก"
+                            >
+                              <X size={13} />
+                            </button>
+                          </form>
+                        ) : (
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                              {displayName}
+                            </h4>
+                            {att.custom_title && (
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {isSingleTopic ? `หมวด: ${topicName}` : 'ทำข้อสอบรวมทั้งหมด'}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Bottom Date and Action */}
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                          <span>
                             {new Date(att.started_at).toLocaleDateString('th-TH', {
                               day: 'numeric',
                               month: 'short',
                               year: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
                             })}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                              isDone
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {isDone ? 'ดูผลสอบ' : 'ทำต่อ'}
                           </span>
-                          <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                          <span className="flex items-center gap-0.5 text-indigo-600 font-semibold group-hover:translate-x-0.5 transition-transform text-[11px]">
+                            {isDone ? 'ดูผลวิเคราะห์' : 'เข้าทำต่อ'}
+                            <ChevronRight size={13} />
+                          </span>
                         </div>
                       </div>
                     )
