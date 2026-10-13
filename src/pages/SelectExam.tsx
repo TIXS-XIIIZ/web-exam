@@ -31,6 +31,7 @@ export default function SelectExam() {
   const [editingAttemptId, setEditingAttemptId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -401,8 +402,36 @@ export default function SelectExam() {
           </div>
 
           {/* Right: Sidebar Stats & Topics & History (4 cols) */}
-          <div className="lg:col-span-4 space-y-6">
-            {/* Quick Topic Overview Box */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* 1. History Button - Placed ABOVE "สรุปจำนวนข้อรายหมวด" */}
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="w-full bg-white hover:bg-indigo-50/50 border border-slate-200/90 hover:border-indigo-300 rounded-2xl p-4 sm:p-4.5 shadow-sm hover:shadow-md transition-all flex items-center justify-between group cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 group-hover:bg-indigo-600 text-indigo-600 group-hover:text-white flex items-center justify-center transition-all shadow-inner flex-shrink-0">
+                  <History size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                    <span>ประวัติการสอบของคุณ</span>
+                    {recentAttempts.length > 0 && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0">
+                        {recentAttempts.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5 truncate">
+                    {recentAttempts.length > 0
+                      ? 'คลิกดูรายละเอียด / เปลี่ยนชื่อ / ทำต่อ'
+                      : 'ยังไม่มีประวัติการสอบ'}
+                  </div>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-slate-400 group-hover:translate-x-1 group-hover:text-indigo-600 transition-all flex-shrink-0 ml-2" />
+            </button>
+
+            {/* 2. Quick Topic Overview Box */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-slate-900 font-bold">
@@ -436,147 +465,188 @@ export default function SelectExam() {
                 ))}
               </div>
             </div>
-
-            {/* Recent Exam Attempts Box */}
-            {recentAttempts.length > 0 && (
-              <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-slate-900 font-bold">
-                    <History size={18} className="text-indigo-600" />
-                    <h3>ประวัติการสอบของคุณ</h3>
-                  </div>
-                  <span className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-md">
-                    {recentAttempts.length} รอบล่าสุด
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {recentAttempts.map((att) => {
-                    const isDone = att.status === 'completed'
-                    const isEditing = editingAttemptId === att.id
-                    const isSingleTopic = !!att.topic_id
-                    const topicName = att.topics?.name
-                    const defaultName = isSingleTopic 
-                      ? (topicName ? `หมวด: ${topicName}` : 'รายหมวดวิชา')
-                      : 'ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)'
-                    const displayName = att.custom_title || defaultName
-
-                    return (
-                      <div
-                        key={att.id}
-                        onClick={() => {
-                          if (isEditing) return
-                          if (isDone) {
-                            navigate(att.topic_id ? `/result/${att.id}?topicId=${att.topic_id}` : `/result/${att.id}`)
-                          } else {
-                            navigate(att.topic_id ? `/exam/${att.exam_id}?attemptId=${att.id}&topicId=${att.topic_id}` : `/exam/${att.exam_id}?attemptId=${att.id}`)
-                          }
-                        }}
-                        className="group p-3.5 rounded-2xl bg-slate-50 hover:bg-indigo-50/40 border border-slate-200/80 hover:border-indigo-300 cursor-pointer transition-all space-y-2 relative"
-                      >
-                        {/* Top Info Bar */}
-                        <div className="flex items-center justify-between gap-2">
-                          {isSingleTopic ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 border border-indigo-200 truncate max-w-[190px]">
-                              <Layers size={11} className="flex-shrink-0" />
-                              <span className="truncate">{topicName || 'รายหมวด'}</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
-                              <BookOpen size={11} className="flex-shrink-0" />
-                              <span>ทำทั้งหมด (1,050 ข้อ)</span>
-                            </span>
-                          )}
-
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button
-                              onClick={(e) => handleStartEdit(att, e)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-colors"
-                              title="เปลี่ยนชื่อประวัตินี้"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                isDone
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {isDone ? (att.total_score != null ? `${Number(att.total_score)} ข้อ` : 'ตรวจแล้ว') : 'ทำต่อ'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Title or Edit Input */}
-                        {isEditing ? (
-                          <form
-                            onSubmit={(e) => handleSaveTitle(att.id, e)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1.5 pt-1"
-                          >
-                            <input
-                              type="text"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              placeholder="ระบุชื่อประวัตินี้..."
-                              autoFocus
-                              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
-                            />
-                            <button
-                              type="submit"
-                              disabled={savingTitle}
-                              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
-                              title="บันทึกชื่อ"
-                            >
-                              <Check size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleCancelEdit}
-                              className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
-                              title="ยกเลิก"
-                            >
-                              <X size={13} />
-                            </button>
-                          </form>
-                        ) : (
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-1">
-                              {displayName}
-                            </h4>
-                            {att.custom_title && (
-                              <p className="text-[10px] text-slate-400 truncate">
-                                {isSingleTopic ? `หมวด: ${topicName}` : 'ทำข้อสอบรวมทั้งหมด'}
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Bottom Date and Action */}
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
-                          <span>
-                            {new Date(att.started_at).toLocaleDateString('th-TH', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                          <span className="flex items-center gap-0.5 text-indigo-600 font-semibold group-hover:translate-x-0.5 transition-transform text-[11px]">
-                            {isDone ? 'ดูผลวิเคราะห์' : 'เข้าทำต่อ'}
-                            <ChevronRight size={13} />
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
+
+      {/* History Modal Dialog */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <History size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base sm:text-lg">ประวัติการสอบของคุณ</h3>
+                  <p className="text-xs text-slate-500">
+                    แสดง {recentAttempts.length} รอบล่าสุด • คลิกเพื่อดูผลวิเคราะห์หรือทำต่อ
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false)
+                  setEditingAttemptId(null)
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="ปิด"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-3.5">
+              {recentAttempts.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 space-y-2">
+                  <History size={40} className="mx-auto text-slate-300" />
+                  <p className="text-sm font-medium text-slate-600">ยังไม่มีประวัติการสอบ</p>
+                  <p className="text-xs text-slate-400">เลือกทำข้อสอบรวมหรือเฉพาะหมวด เพื่อเริ่มต้นบันทึกประวัติ</p>
+                </div>
+              ) : (
+                recentAttempts.map((att) => {
+                  const isDone = att.status === 'completed'
+                  const isEditing = editingAttemptId === att.id
+                  const isSingleTopic = !!att.topic_id
+                  const topicName = att.topics?.name
+                  const defaultName = isSingleTopic
+                    ? (topicName ? `หมวด: ${topicName}` : 'รายหมวดวิชา')
+                    : 'ทำข้อสอบรวมทั้งหมด (1,050 ข้อ)'
+                  const displayName = att.custom_title || defaultName
+
+                  return (
+                    <div
+                      key={att.id}
+                      onClick={() => {
+                        if (isEditing) return
+                        setShowHistoryModal(false)
+                        if (isDone) {
+                          navigate(att.topic_id ? `/result/${att.id}?topicId=${att.topic_id}` : `/result/${att.id}`)
+                        } else {
+                          navigate(att.topic_id ? `/exam/${att.exam_id}?attemptId=${att.id}&topicId=${att.topic_id}` : `/exam/${att.exam_id}?attemptId=${att.id}`)
+                        }
+                      }}
+                      className="group p-4 rounded-2xl bg-slate-50 hover:bg-indigo-50/40 border border-slate-200/80 hover:border-indigo-300 cursor-pointer transition-all space-y-2.5 relative"
+                    >
+                      {/* Top Info Bar */}
+                      <div className="flex items-center justify-between gap-2">
+                        {isSingleTopic ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200">
+                            <Layers size={13} className="flex-shrink-0" />
+                            <span>หมวด: {topicName || 'รายหมวด'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-700 border border-blue-200">
+                            <BookOpen size={13} className="flex-shrink-0" />
+                            <span>ทำทั้งหมด (1,050 ข้อ)</span>
+                          </span>
+                        )}
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => handleStartEdit(att, e)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white transition-colors cursor-pointer"
+                            title="เปลี่ยนชื่อประวัตินี้"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <span
+                            className={`text-xs font-bold px-3 py-1 rounded-full ${
+                              isDone
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {isDone ? (att.total_score != null ? `${Number(att.total_score)} ข้อ` : 'ตรวจแล้ว') : 'ทำต่อ'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Title or Inline Edit Input */}
+                      {isEditing ? (
+                        <form
+                          onSubmit={(e) => handleSaveTitle(att.id, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 pt-1"
+                        >
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            placeholder="ระบุชื่อประวัตินี้..."
+                            autoFocus
+                            className="flex-1 text-sm px-3 py-2 rounded-xl border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
+                          />
+                          <button
+                            type="submit"
+                            disabled={savingTitle}
+                            className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 cursor-pointer"
+                            title="บันทึกชื่อ"
+                          >
+                            <Check size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                            title="ยกเลิก"
+                          >
+                            <X size={15} />
+                          </button>
+                        </form>
+                      ) : (
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            {displayName}
+                          </h4>
+                          {att.custom_title && (
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {isSingleTopic ? `หมวดวิชา: ${topicName}` : 'ทำข้อสอบรวมทั้งหมด'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Bottom Date and Action */}
+                      <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-100">
+                        <span>
+                          {new Date(att.started_at).toLocaleDateString('th-TH', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        <span className="flex items-center gap-1 text-indigo-600 font-semibold group-hover:translate-x-1 transition-transform">
+                          {isDone ? 'ดูผลวิเคราะห์' : 'เข้าทำต่อ'}
+                          <ChevronRight size={14} />
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false)
+                  setEditingAttemptId(null)
+                }}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm cursor-pointer transition-colors"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
