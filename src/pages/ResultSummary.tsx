@@ -218,8 +218,8 @@ export default function ResultSummary() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/70 py-8 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
-      <div className="max-w-3xl w-full space-y-6">
+    <div className="min-h-screen bg-slate-100/70 py-4 sm:py-8 px-3 sm:px-6 lg:px-8 flex justify-center items-start">
+      <div className="max-w-3xl w-full space-y-4 sm:space-y-6">
         {/* Navigation Breadcrumb */}
         <div className="flex items-center justify-between">
           <Link
@@ -229,15 +229,15 @@ export default function ResultSummary() {
             <ArrowLeft size={16} />
             <span>กลับสู่หน้าเลือกวิชา</span>
           </Link>
-          <span className="text-xs text-slate-400">รหัสรอบสอบ: #{attemptId}</span>
+          <span className="text-[11px] sm:text-xs text-slate-400">รหัสรอบสอบ: #{attemptId}</span>
         </div>
 
         {/* Hero Score Card */}
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/90 shadow-sm relative overflow-hidden">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-10 border border-slate-200/90 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-indigo-100/50 to-blue-50/20 rounded-full blur-3xl pointer-events-none"></div>
 
-          <div className="relative z-10 flex flex-col items-center text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-inner">
+          <div className="relative z-10 flex flex-col items-center text-center space-y-3 sm:space-y-4">
+            <div className="w-14 sm:w-16 h-14 sm:h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-inner">
               <Trophy size={32} />
             </div>
 
