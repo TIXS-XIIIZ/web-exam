@@ -6,6 +6,8 @@ import SelectExam from './pages/SelectExam'
 import ExamSession from './pages/ExamSession'
 import ResultSummary from './pages/ResultSummary'
 
+import { AlertProvider } from './components/AlertProvider'
+
 function App() {
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -121,25 +123,27 @@ function App() {
 
   return (
     <Router>
-      {globalError && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full px-4">
-          <div className="bg-rose-600 text-white p-3 rounded-xl shadow-xl flex items-center justify-between text-xs sm:text-sm">
-            <span>{globalError}</span>
-            <button
-              onClick={() => setGlobalError(null)}
-              className="ml-3 font-bold hover:opacity-75"
-            >
-              ✕
-            </button>
+      <AlertProvider>
+        {globalError && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full px-4 pointer-events-auto">
+            <div className="bg-rose-600/95 backdrop-blur-md text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-between text-xs sm:text-sm border border-rose-500/50">
+              <span className="font-medium">{globalError}</span>
+              <button
+                onClick={() => setGlobalError(null)}
+                className="ml-3 p-1 rounded-lg hover:bg-rose-700 font-bold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-      <Routes>
-        <Route path="/" element={!session ? <Login initialError={globalError} /> : <Navigate to="/select" replace />} />
-        <Route path="/select" element={session ? <SelectExam /> : <Navigate to="/" replace />} />
-        <Route path="/exam/:examId" element={session ? <ExamSession /> : <Navigate to="/" replace />} />
-        <Route path="/result/:attemptId" element={session ? <ResultSummary /> : <Navigate to="/" replace />} />
-      </Routes>
+        )}
+        <Routes>
+          <Route path="/" element={!session ? <Login initialError={globalError} /> : <Navigate to="/select" replace />} />
+          <Route path="/select" element={session ? <SelectExam /> : <Navigate to="/" replace />} />
+          <Route path="/exam/:examId" element={session ? <ExamSession /> : <Navigate to="/" replace />} />
+          <Route path="/result/:attemptId" element={session ? <ResultSummary /> : <Navigate to="/" replace />} />
+        </Routes>
+      </AlertProvider>
     </Router>
   )
 }

@@ -22,8 +22,10 @@ import {
   Shuffle,
   Trash2
 } from 'lucide-react'
+import { useAlert } from '../components/AlertProvider'
 
 export default function SelectExam() {
+  const { toast, confirm } = useAlert()
   const [exams, setExams] = useState<any[]>([])
   const [topics, setTopics] = useState<any[]>([])
   const [user, setUser] = useState<any>(null)
@@ -126,7 +128,7 @@ export default function SelectExam() {
 
       if (error) {
         console.error(error)
-        alert('ไม่สามารถเริ่มทำข้อสอบได้: ' + error.message)
+        toast.error(error.message, 'ไม่สามารถเริ่มทำข้อสอบได้')
         return
       }
 
@@ -138,7 +140,7 @@ export default function SelectExam() {
 
       navigate(`/exam/${examId}?${queryParams.toString()}`)
     } catch (err: any) {
-      alert('เกิดข้อผิดพลาด: ' + err.message)
+      toast.error(err.message, 'เกิดข้อผิดพลาด')
     } finally {
       setStartingId(null)
     }
@@ -170,7 +172,7 @@ export default function SelectExam() {
         .eq('id', attemptId)
 
       if (error) {
-        alert('ไม่สามารถบันทึกชื่อได้: ' + error.message)
+        toast.error(error.message, 'ไม่สามารถบันทึกชื่อได้')
         return
       }
 
@@ -179,8 +181,9 @@ export default function SelectExam() {
       )
       setEditingAttemptId(null)
       setEditingTitle('')
+      toast.success('บันทึกชื่อประวัตินี้เรียบร้อยแล้ว')
     } catch (err: any) {
-      alert('เกิดข้อผิดพลาด: ' + err.message)
+      toast.error(err.message, 'เกิดข้อผิดพลาด')
     } finally {
       setSavingTitle(false)
     }
@@ -188,8 +191,14 @@ export default function SelectExam() {
 
   const handleDeleteAttempt = async (attemptId: number, e: React.MouseEvent) => {
     e.stopPropagation()
-    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลคะแนนและคำตอบในรอบนี้จะถูกลบถาวร')
-    if (!confirmed) return
+    const ok = await confirm({
+      title: 'ยืนยันการลบประวัติการสอบ',
+      message: 'คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลคะแนนและคำตอบในรอบนี้จะถูกลบถาวร',
+      confirmText: 'ลบประวัตินี้',
+      cancelText: 'ยกเลิก',
+      type: 'danger',
+    })
+    if (!ok) return
 
     try {
       setDeletingAttemptId(attemptId)
@@ -201,8 +210,9 @@ export default function SelectExam() {
       if (error) throw error
 
       setRecentAttempts((prev) => prev.filter((a) => a.id !== attemptId))
+      toast.success('ลบประวัติการสอบรอบนี้เรียบร้อยแล้ว')
     } catch (err: any) {
-      alert('ไม่สามารถลบประวัติได้: ' + err.message)
+      toast.error(err.message, 'ไม่สามารถลบประวัติได้')
     } finally {
       setDeletingAttemptId(null)
     }
@@ -210,8 +220,14 @@ export default function SelectExam() {
 
   const handleClearAllHistory = async () => {
     if (!user) return
-    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบทั้งหมดของคุณใช่หรือไม่?\nประวัติการทำข้อสอบทุกรอบจะถูกลบถาวรและไม่สามารถกู้คืนได้')
-    if (!confirmed) return
+    const ok = await confirm({
+      title: 'ลบประวัติการสอบทั้งหมด?',
+      message: 'คุณแน่ใจหรือไม่ว่าต้องการลบประวัติการสอบทุกรอบของคุณ?\nข้อมูลทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้',
+      confirmText: 'ลบประวัติทั้งหมด',
+      cancelText: 'ยกเลิก',
+      type: 'danger',
+    })
+    if (!ok) return
 
     try {
       setIsClearingAll(true)
@@ -223,8 +239,9 @@ export default function SelectExam() {
       if (error) throw error
 
       setRecentAttempts([])
+      toast.success('ลบประวัติการสอบทั้งหมดเรียบร้อยแล้ว')
     } catch (err: any) {
-      alert('ไม่สามารถลบประวัติทั้งหมดได้: ' + err.message)
+      toast.error(err.message, 'ไม่สามารถลบประวัติทั้งหมดได้')
     } finally {
       setIsClearingAll(false)
     }

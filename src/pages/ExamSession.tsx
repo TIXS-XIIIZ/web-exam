@@ -17,6 +17,7 @@ import {
   Shuffle
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
+import { useAlert } from '../components/AlertProvider'
 
 function seededRandom(seed: number) {
   const x = Math.sin(seed) * 10000
@@ -58,6 +59,7 @@ type AnswerState = {
 }
 
 export default function ExamSession() {
+  const { toast } = useAlert()
   const { examId } = useParams()
   const [searchParams] = useSearchParams()
   const attemptId = searchParams.get('attemptId')
@@ -401,9 +403,9 @@ export default function ExamSession() {
       const targetUrl = queryString ? `/result/${attemptId}?${queryString}` : `/result/${attemptId}`
 
       navigate(targetUrl)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to finish exam:', err)
-      alert('เกิดข้อผิดพลาดในการส่งข้อสอบ โปรดลองใหม่อีกครั้ง')
+      toast.error(err?.message || 'เกิดข้อผิดพลาดในการส่งข้อสอบ โปรดลองใหม่อีกครั้ง', 'ส่งข้อสอบไม่สำเร็จ')
       setSubmitting(false)
       setIsTimeUpModal(false)
     }

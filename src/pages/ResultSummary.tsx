@@ -29,6 +29,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
+import { useAlert } from '../components/AlertProvider'
 
 function seededRandom(seed: number) {
   const x = Math.sin(seed) * 10000
@@ -71,6 +72,7 @@ type QuestionReviewItem = {
 }
 
 export default function ResultSummary() {
+  const { toast, confirm } = useAlert()
   const { attemptId } = useParams()
   const [searchParams] = useSearchParams()
   const topicIdParam = searchParams.get('topicId')
@@ -313,15 +315,21 @@ export default function ResultSummary() {
 
       navigate(`/exam/${examId}?${queryParams.toString()}`)
     } catch (err: any) {
-      alert('ไม่สามารถเริ่มรอบใหม่ได้: ' + err.message)
+      toast.error(err.message, 'ไม่สามารถเริ่มรอบใหม่ได้')
       setRetaking(false)
     }
   }
 
   const handleDeleteAttempt = async () => {
     if (!attemptId) return
-    const confirmed = window.confirm('คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลผลคะแนนและสถิติทั้งหมดในรอบนี้จะถูกลบถาวร')
-    if (!confirmed) return
+    const ok = await confirm({
+      title: 'ยืนยันการลบผลการสอบ',
+      message: 'คุณต้องการลบประวัติการสอบรอบนี้ใช่หรือไม่?\nข้อมูลผลคะแนน คำตอบ และสถิติทั้งหมดในรอบนี้จะถูกลบถาวร',
+      confirmText: 'ลบประวัตินี้',
+      cancelText: 'ยกเลิก',
+      type: 'danger',
+    })
+    if (!ok) return
 
     try {
       setDeletingAttempt(true)
@@ -332,9 +340,10 @@ export default function ResultSummary() {
 
       if (error) throw error
 
+      toast.success('ลบประวัติการสอบรอบนี้เรียบร้อยแล้ว')
       navigate('/select')
     } catch (err: any) {
-      alert('ไม่สามารถลบประวัติได้: ' + err.message)
+      toast.error(err.message, 'ไม่สามารถลบประวัติได้')
       setDeletingAttempt(false)
     }
   }
@@ -352,14 +361,15 @@ export default function ResultSummary() {
         .eq('id', attemptId)
 
       if (error) {
-        alert('ไม่สามารถบันทึกชื่อได้: ' + error.message)
+        toast.error(error.message, 'ไม่สามารถบันทึกชื่อได้')
         return
       }
 
       setExamTitle(cleanTitle || (singleTopicName ? `หมวด: ${singleTopicName}` : 'ข้อสอบรวมทั้งหมด'))
       setIsEditingTitle(false)
+      toast.success('บันทึกชื่อรอบสอบนี้เรียบร้อยแล้ว')
     } catch (err: any) {
-      alert('เกิดข้อผิดพลาด: ' + err.message)
+      toast.error(err.message, 'เกิดข้อผิดพลาด')
     } finally {
       setSavingTitle(false)
     }

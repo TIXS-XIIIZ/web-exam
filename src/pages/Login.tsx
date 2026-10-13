@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAlert } from '../components/AlertProvider'
 import { 
   Scale, 
   CheckCircle2, 
@@ -20,6 +21,7 @@ interface LoginProps {
 }
 
 export default function Login({ initialError }: LoginProps) {
+  const { toast } = useAlert()
   const [loading, setLoading] = useState(false)
   const [demoLoading, setDemoLoading] = useState(false)
   const [showEmailLogin, setShowEmailLogin] = useState(false)
@@ -42,7 +44,9 @@ export default function Login({ initialError }: LoginProps) {
       if (error) throw error
     } catch (err: any) {
       console.error(err)
-      setAuthError(err.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google')
+      const msg = err.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วย Google'
+      setAuthError(msg)
+      toast.error(msg, 'เข้าสู่ระบบไม่สำเร็จ')
       setLoading(false)
     }
   }
@@ -56,10 +60,13 @@ export default function Login({ initialError }: LoginProps) {
         password: 'ExamPassword2026!',
       })
       if (error) throw error
+      toast.success('ยินดีต้อนรับเข้าสู่ระบบบัญชีทดสอบ!')
       window.location.href = '/select'
     } catch (err: any) {
       console.error(err)
-      setAuthError(err.message || 'ไม่สามารถเข้าสู่ระบบด้วยบัญชีทดสอบได้')
+      const msg = err.message || 'ไม่สามารถเข้าสู่ระบบด้วยบัญชีทดสอบได้'
+      setAuthError(msg)
+      toast.error(msg, 'เข้าสู่ระบบไม่สำเร็จ')
     } finally {
       setDemoLoading(false)
     }
@@ -68,7 +75,9 @@ export default function Login({ initialError }: LoginProps) {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
-      setAuthError('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน')
+      const msg = 'กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน'
+      setAuthError(msg)
+      toast.warning(msg)
       return
     }
 
@@ -84,9 +93,12 @@ export default function Login({ initialError }: LoginProps) {
         })
         if (error) throw error
         if (data.session) {
+          toast.success('สร้างบัญชีและเข้าสู่ระบบสำเร็จ!')
           window.location.href = '/select'
         } else {
-          setAuthMessage('สร้างบัญชีสำเร็จ! เข้าสู่ระบบได้ทันที')
+          const msg = 'สร้างบัญชีสำเร็จ! เข้าสู่ระบบได้ทันที'
+          setAuthMessage(msg)
+          toast.success(msg)
           setIsSignUp(false)
         }
       } else {
@@ -95,11 +107,14 @@ export default function Login({ initialError }: LoginProps) {
           password,
         })
         if (error) throw error
+        toast.success('เข้าสู่ระบบสำเร็จ!')
         window.location.href = '/select'
       }
     } catch (err: any) {
       console.error(err)
-      setAuthError(err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง')
+      const msg = err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+      setAuthError(msg)
+      toast.error(msg, 'เข้าสู่ระบบไม่สำเร็จ')
     } finally {
       setLoading(false)
     }
