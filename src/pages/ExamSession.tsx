@@ -14,7 +14,9 @@ import {
   Loader2,
   AlertCircle,
   Clock,
-  Shuffle
+  Shuffle,
+  Pause,
+  Play
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
 import { useAlert } from '../components/AlertProvider'
@@ -59,7 +61,7 @@ type AnswerState = {
 }
 
 export default function ExamSession() {
-  const { toast } = useAlert()
+  const { toast, confirm } = useAlert()
   const { examId } = useParams()
   const [searchParams] = useSearchParams()
   const attemptId = searchParams.get('attemptId')
@@ -74,6 +76,8 @@ export default function ExamSession() {
   const [showDrawer, setShowDrawer] = useState(false)
   const [showFinishModal, setShowFinishModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
+  const [isPausingAndExiting, setIsPausingAndExiting] = useState(false)
 
   // Exam Mode and Timer States
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('practice')
@@ -88,6 +92,12 @@ export default function ExamSession() {
   const questionTimesRef = useRef<Record<number, number>>({})
   const answerRecordIdsRef = useRef<Record<number, number>>({})
 
+  // Ref to hold current timer values for beforeunload and sync
+  const timerValuesRef = useRef({ elapsedSeconds: 0, remainingSeconds: 10800 })
+  useEffect(() => {
+    timerValuesRef.current = { elapsedSeconds, remainingSeconds }
+  }, [elapsedSeconds, remainingSeconds])
+
   useEffect(() => {
     async function fetchQuestions() {
       if (!examId || !attemptId) return
@@ -96,7 +106,7 @@ export default function ExamSession() {
         // 0. Fetch Attempt details
         const { data: attemptData } = await supabase
           .from('exam_attempts')
-          .select('id, exam_mode, time_limit_seconds, is_random, started_at, status')
+          .select('id, exam_mode, time_limit_seconds, remaining_seconds, time_spent_seconds, is_random, started_at, status')
           .eq('id', attemptId)
           .single()
 
@@ -115,10 +125,22 @@ export default function ExamSession() {
           const randomFlag = attemptData.is_random ?? (searchParams.get('random') === '1')
           setIsRandom(randomFlag)
 
-          const startedMs = attemptData.started_at ? new Date(attemptData.started_at).getTime() : Date.now()
-          const currentElapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
-          setElapsedSeconds(currentElapsed)
-          setRemainingSeconds(Math.max(0, limit - currentElapsed))
+          // Restore elapsed and remaining time accurately
+          const savedSpent = attemptData.time_spent_seconds || 0
+          setElapsedSeconds(savedSpent)
+
+          if (mode === 'real_exam') {
+            if (typeof attemptData.remaining_seconds === 'number' && attemptData.remaining_seconds >= 0) {
+              setRemainingSeconds(attemptData.remaining_seconds)
+            } else {
+              setRemainingSeconds(Math.max(0, limit - savedSpent))
+            }
+          }
+
+          // If it was paused, let user see paused screen on reload/resume
+          if (attemptData.status === 'paused') {
+            setIsPaused(true)
+          }
         }
 
         // 1. Fetch Exam info and optional Topic info
@@ -273,7 +295,7 @@ export default function ExamSession() {
 
   // Timer Tick Interval
   useEffect(() => {
-    if (loading || submitting || isTimeUpModal) return
+    if (loading || submitting || isTimeUpModal || isPaused) return
 
     const timer = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1)
@@ -291,14 +313,14 @@ export default function ExamSession() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [loading, submitting, isTimeUpModal, examMode])
+  }, [loading, submitting, isTimeUpModal, isPaused, examMode])
 
   // Helper to accumulate time on current question
   const flushCurrentQuestionTime = () => {
     const currentQ = questions[currentIndex]
     if (!currentQ) return
     const now = Date.now()
-    const deltaSec = Math.max(1, Math.round((now - questionStartTimeRef.current) / 1000))
+    const deltaSec = Math.max(0, Math.round((now - questionStartTimeRef.current) / 1000))
     questionStartTimeRef.current = now
     const totalQTime = (questionTimesRef.current[currentQ.id] || 0) + deltaSec
     questionTimesRef.current[currentQ.id] = totalQTime
@@ -313,6 +335,91 @@ export default function ExamSession() {
         .then()
     }
   }
+
+  // Save current progress, elapsed time and remaining time to database
+  const saveProgressToDb = async (newStatus: 'in_progress' | 'paused') => {
+    if (!attemptId) return
+    flushCurrentQuestionTime()
+    const { elapsedSeconds: curElapsed, remainingSeconds: curRemaining } = timerValuesRef.current
+
+    try {
+      await supabase
+        .from('exam_attempts')
+        .update({
+          status: newStatus,
+          time_spent_seconds: curElapsed,
+          remaining_seconds: examMode === 'real_exam' ? curRemaining : null,
+        })
+        .eq('id', attemptId)
+    } catch (e) {
+      console.error('Failed to sync paused time to database:', e)
+    }
+  }
+
+  // Handle Pause and Resume
+  const handleTogglePause = async () => {
+    if (isPaused) {
+      // Resume
+      questionStartTimeRef.current = Date.now()
+      setIsPaused(false)
+      await saveProgressToDb('in_progress')
+      toast.info('ทำข้อสอบต่อ เวลาเริ่มเดินตามปกติ')
+    } else {
+      // Pause
+      flushCurrentQuestionTime()
+      setIsPaused(true)
+      await saveProgressToDb('paused')
+      toast.warning('หยุดเวลาชั่วคราวแล้ว คุณสามารถกลับมาทำต่อได้ตลอดเวลา')
+    }
+  }
+
+  // Handle exiting with auto-pause
+  const handleExitWithPause = async () => {
+    const ok = await confirm({
+      title: 'ต้องการพักการทำข้อสอบชั่วคราว?',
+      message: 'ระบบจะทำการหยุดเวลา (Pause) บันทึกคำตอบทั้งหมดและเวลาที่คุณทำไว้ลงในระบบ เพื่อให้คุณสามารถกลับมาทำต่อได้ในภายหลัง',
+      confirmText: 'พักการสอบและออก',
+      cancelText: 'ทำข้อสอบต่อ',
+      type: 'info',
+    })
+    if (!ok) return
+
+    try {
+      setIsPausingAndExiting(true)
+      setIsPaused(true)
+      await saveProgressToDb('paused')
+      toast.success('บันทึกเวลาและสถานะเรียบร้อยแล้ว')
+      navigate('/select')
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message, 'เกิดข้อผิดพลาดในการบันทึก')
+      navigate('/select')
+    } finally {
+      setIsPausingAndExiting(false)
+    }
+  }
+
+  // Auto-sync on window close / tab switch
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!attemptId || submitting) return
+      const { elapsedSeconds: curElapsed, remainingSeconds: curRemaining } = timerValuesRef.current
+      supabase
+        .from('exam_attempts')
+        .update({
+          status: 'paused',
+          time_spent_seconds: curElapsed,
+          remaining_seconds: examMode === 'real_exam' ? curRemaining : null,
+        })
+        .eq('id', attemptId)
+        .then()
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [attemptId, submitting, examMode])
 
   const handleNavigateQuestion = (newIndex: number) => {
     flushCurrentQuestionTime()
@@ -469,13 +576,14 @@ export default function ExamSession() {
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Link
-              to="/select"
-              className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors flex-shrink-0"
-              title="กลับสู่หน้าเลือกวิชา"
+            <button
+              onClick={handleExitWithPause}
+              disabled={isPausingAndExiting}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50"
+              title="พักการสอบและกลับสู่หน้าเลือกวิชา"
             >
-              <ChevronLeft size={20} />
-            </Link>
+              {isPausingAndExiting ? <Loader2 size={20} className="animate-spin text-indigo-600" /> : <ChevronLeft size={20} />}
+            </button>
             <div className="min-w-0">
               <h1 className="text-xs sm:text-base font-bold text-slate-900 truncate">
                 {examTitle || 'ห้องสอบ'}
@@ -484,35 +592,71 @@ export default function ExamSession() {
                 <span className="whitespace-nowrap">ข้อ <strong className="text-indigo-600 font-bold">{currentIndex + 1}</strong>/{questions.length}</span>
                 <span>•</span>
                 <span className="truncate">ตอบแล้ว {answeredCount} ({progressPercent}%)</span>
+                {isPaused && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                    ⏸️ พักการสอบ
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Pause / Resume Button */}
+            <button
+              onClick={handleTogglePause}
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer active:scale-95 ${
+                isPaused
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-md shadow-amber-500/20'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+              }`}
+              title={isPaused ? 'กดเพื่อทำข้อสอบต่อ' : 'กดเพื่อพักการสอบชั่วคราว (หยุดเวลา)'}
+            >
+              {isPaused ? (
+                <>
+                  <Play size={13} fill="currentColor" />
+                  <span className="hidden sm:inline">ทำต่อ</span>
+                </>
+              ) : (
+                <>
+                  <Pause size={13} fill="currentColor" />
+                  <span className="hidden sm:inline">พักสอบ</span>
+                </>
+              )}
+            </button>
+
             {/* Timer Badge */}
             {examMode === 'real_exam' ? (
               <div
                 className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-mono text-xs font-bold border transition-colors ${
-                  remainingSeconds <= 600
+                  isPaused
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-400/20'
+                    : remainingSeconds <= 600
                     ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
                     : 'bg-amber-50 text-amber-800 border-amber-200'
                 }`}
                 title={`เวลาสอบจริง คงเหลือ: ${formatTimer(remainingSeconds)}`}
               >
-                <Clock size={14} className={remainingSeconds <= 600 ? 'text-rose-600' : 'text-amber-600'} />
+                <Clock size={14} className={isPaused ? 'text-amber-600' : remainingSeconds <= 600 ? 'text-rose-600' : 'text-amber-600'} />
                 <span>{formatTimer(remainingSeconds)}</span>
                 <span className="hidden md:inline font-sans text-[10px] text-amber-700 font-medium">
-                  {remainingSeconds <= 600 ? '(ใกล้หมดเวลา)' : '(สอบจริง)'}
+                  {isPaused ? '(หยุดเวลา)' : remainingSeconds <= 600 ? '(ใกล้หมดเวลา)' : '(สอบจริง)'}
                 </span>
               </div>
             ) : (
               <div
-                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-mono text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-mono text-xs font-semibold border ${
+                  isPaused
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-400/20'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}
                 title={`เวลาที่ใช้: ${formatTimer(elapsedSeconds)}`}
               >
-                <Clock size={14} className="text-indigo-600" />
+                <Clock size={14} className={isPaused ? 'text-amber-600' : 'text-indigo-600'} />
                 <span>{formatTimer(elapsedSeconds)}</span>
-                <span className="hidden md:inline font-sans text-[10px] text-slate-500">(ฝึกฝน)</span>
+                <span className="hidden md:inline font-sans text-[10px] text-slate-500">
+                  {isPaused ? '(หยุดเวลา)' : '(ฝึกฝน)'}
+                </span>
               </div>
             )}
 
@@ -648,6 +792,36 @@ export default function ExamSession() {
                 <p className="text-xs sm:text-sm text-emerald-950 font-medium leading-relaxed sm:leading-loose whitespace-pre-line pl-5 sm:pl-6 break-words">
                   {currentQ.explanation}
                 </p>
+              </div>
+            )}
+
+            {/* Paused State Overlay */}
+            {isPaused && (
+              <div className="absolute inset-0 z-20 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center mb-4 shadow-xl shadow-amber-500/30 animate-pulse">
+                  <Pause size={32} />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white mb-2">
+                  หยุดเวลาทำข้อสอบชั่วคราว
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-200 max-w-sm mb-6 leading-relaxed">
+                  ระบบได้บันทึกเวลาและคำตอบของคุณไว้เรียบร้อยแล้ว นาฬิกาหยุดเดินชั่วคราว กดปุ่มด้านล่างเพื่อทำข้อสอบต่อ
+                </p>
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
+                  <button
+                    onClick={handleTogglePause}
+                    className="w-full py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Play size={16} fill="currentColor" />
+                    <span>ทำข้อสอบต่อทันที</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/select')}
+                    className="w-full py-2.5 px-5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    กลับสู่หน้าเลือกวิชา
+                  </button>
+                </div>
               </div>
             )}
           </div>

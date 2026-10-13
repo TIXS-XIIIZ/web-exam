@@ -874,10 +874,16 @@ export default function SelectExam() {
                             className={`text-xs font-bold px-3 py-1 rounded-full ${
                               isDone
                                 ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
+                                : att.status === 'paused'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-blue-100 text-blue-800'
                             }`}
                           >
-                            {isDone ? (att.total_score != null ? `${Number(att.total_score)} ข้อ` : 'ตรวจแล้ว') : 'ทำต่อ'}
+                            {isDone
+                              ? (att.total_score != null ? `${Number(att.total_score)} ข้อ` : 'ตรวจแล้ว')
+                              : att.status === 'paused'
+                              ? '⏸️ พักการสอบ'
+                              : 'ทำต่อ'}
                           </span>
                         </div>
                       </div>
