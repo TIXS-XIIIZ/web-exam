@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
+const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2])
+
 export default function SelectExam() {
   const { toast, confirm } = useAlert()
   const [exams, setExams] = useState<any[]>([])
@@ -76,6 +78,7 @@ export default function SelectExam() {
         const { data: topicData } = await supabase
           .from('topics')
           .select('id, name, questions(count)')
+          .order('id', { ascending: true })
         if (topicData) {
           const formattedTopics = topicData.map((t: any) => ({
             id: t.id,
@@ -989,7 +992,7 @@ export default function SelectExam() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mb-3">
-                คลิกที่หมวดใดก็ได้เพื่อเริ่มทำทันที:
+                คลิกที่หมวดใดก็ได้เพื่อเริ่มทำทันที • เครื่องหมายถูกหมายถึงตรวจสอบโดยมนุษย์แล้ว
               </p>
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {topics.map((topic, i) => (
@@ -998,11 +1001,19 @@ export default function SelectExam() {
                     onClick={() => handleStartExam(primaryExam.id, topic.id)}
                     className="w-full text-left flex items-center justify-between gap-2 text-xs text-slate-700 p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer group"
                   >
-                    <div className="flex items-center gap-2 truncate">
+                    <div className="flex items-start gap-2 min-w-0">
                       <span className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
                         {i + 1}
                       </span>
-                      <span className="truncate group-hover:text-indigo-600 font-medium">{topic.name}</span>
+                      <div className="min-w-0">
+                        <span className="block truncate group-hover:text-indigo-600 font-medium">{topic.name}</span>
+                        {HUMAN_REVIEWED_TOPIC_IDS.has(topic.id) && (
+                          <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                            <CheckCircle size={12} aria-hidden="true" />
+                            ตรวจสอบโดยมนุษย์แล้ว
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 flex-shrink-0">
                       {topic.questionCount} ข้อ
