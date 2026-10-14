@@ -55,7 +55,7 @@ export default function SelectExam() {
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number>(180)
   const [customMinutesInput, setCustomMinutesInput] = useState<string>('180')
   const [isCustomTime, setIsCustomTime] = useState<boolean>(false)
-  const [isRandom, setIsRandom] = useState<boolean>(true)
+  const [isRandom, setIsRandom] = useState<boolean>(false)
 
   const navigate = useNavigate()
 
