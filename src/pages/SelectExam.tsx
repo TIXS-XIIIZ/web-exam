@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
-const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2])
+const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2, 3, 4, 5])
 
 export default function SelectExam() {
   const { toast, confirm } = useAlert()
