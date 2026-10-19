@@ -22,11 +22,94 @@ import {
   Shuffle,
   Trash2,
   Plus,
-  SlidersHorizontal
+  SlidersHorizontal,
+  PieChart,
+  Minus
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
 const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2, 3, 4, 5])
+
+export const TOPIC_PALETTE = [
+  { bg: 'bg-indigo-500', bar: 'bg-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', border: 'border-indigo-200', hex: '#6366f1' },
+  { bg: 'bg-purple-500', bar: 'bg-purple-500', text: 'text-purple-700', light: 'bg-purple-50', border: 'border-purple-200', hex: '#a855f7' },
+  { bg: 'bg-sky-500', bar: 'bg-sky-500', text: 'text-sky-700', light: 'bg-sky-50', border: 'border-sky-200', hex: '#0ea5e9' },
+  { bg: 'bg-emerald-500', bar: 'bg-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', border: 'border-emerald-200', hex: '#10b981' },
+  { bg: 'bg-amber-500', bar: 'bg-amber-500', text: 'text-amber-700', light: 'bg-amber-50', border: 'border-amber-200', hex: '#f59e0b' },
+  { bg: 'bg-rose-500', bar: 'bg-rose-500', text: 'text-rose-700', light: 'bg-rose-50', border: 'border-rose-200', hex: '#f43f5e' },
+  { bg: 'bg-fuchsia-500', bar: 'bg-fuchsia-500', text: 'text-fuchsia-700', light: 'bg-fuchsia-50', border: 'border-fuchsia-200', hex: '#d946ef' },
+  { bg: 'bg-teal-500', bar: 'bg-teal-500', text: 'text-teal-700', light: 'bg-teal-50', border: 'border-teal-200', hex: '#14b8a6' },
+  { bg: 'bg-cyan-500', bar: 'bg-cyan-500', text: 'text-cyan-700', light: 'bg-cyan-50', border: 'border-cyan-200', hex: '#06b6d4' },
+  { bg: 'bg-orange-500', bar: 'bg-orange-500', text: 'text-orange-700', light: 'bg-orange-50', border: 'border-orange-200', hex: '#f97316' },
+  { bg: 'bg-violet-500', bar: 'bg-violet-500', text: 'text-violet-700', light: 'bg-violet-50', border: 'border-violet-200', hex: '#8b5cf6' },
+  { bg: 'bg-pink-500', bar: 'bg-pink-500', text: 'text-pink-700', light: 'bg-pink-50', border: 'border-pink-200', hex: '#ec4899' },
+]
+
+export function calculateProportionalAllocation(
+  selectedIds: number[],
+  topicsList: any[],
+  targetTotal: number
+): Record<number, number> {
+  const selected = topicsList.filter((t) => selectedIds.includes(t.id))
+  const totalAvail = selected.reduce((sum, t) => sum + (t.questionCount || 0), 0)
+  if (totalAvail <= 0 || selected.length === 0) return {}
+  if (targetTotal >= totalAvail) {
+    const res: Record<number, number> = {}
+    selected.forEach((t) => { res[t.id] = t.questionCount || 0 })
+    return res
+  }
+
+  const k = selected.length
+  const target = Math.max(1, Math.min(targetTotal, totalAvail))
+
+  const items = selected.map((t) => {
+    const avail = t.questionCount || 0
+    const exact = (avail / totalAvail) * target
+    return {
+      id: t.id,
+      avail,
+      count: Math.floor(exact),
+      remainder: exact - Math.floor(exact),
+    }
+  })
+
+  // If target >= k, ensure at least 1 question per topic if avail >= 1
+  if (target >= k) {
+    items.forEach((item) => {
+      if (item.count === 0 && item.avail >= 1) {
+        item.count = 1
+      }
+    })
+  }
+
+  let currentSum = items.reduce((s, it) => s + it.count, 0)
+  let diff = target - currentSum
+
+  if (diff > 0) {
+    items.sort((a, b) => b.remainder - a.remainder)
+    for (let i = 0; i < items.length && diff > 0; i++) {
+      if (items[i].count < items[i].avail) {
+        items[i].count += 1
+        diff--
+      }
+    }
+  } else if (diff < 0) {
+    items.sort((a, b) => a.remainder - b.remainder)
+    for (let i = 0; i < items.length && diff < 0; i++) {
+      const minCount = target >= k ? 1 : 0
+      if (items[i].count > minCount) {
+        items[i].count -= 1
+        diff++
+      }
+    }
+  }
+
+  const res: Record<number, number> = {}
+  items.forEach((it) => {
+    res[it.id] = it.count
+  })
+  return res
+}
 
 export default function SelectExam() {
   const { toast, confirm } = useAlert()
@@ -51,6 +134,11 @@ export default function SelectExam() {
   const [selectedTopicIds, setSelectedTopicIds] = useState<number[]>([])
   const [isSavingCustomSet, setIsSavingCustomSet] = useState<boolean>(false)
   const [deletingSetId, setDeletingSetId] = useState<number | null>(null)
+
+  // Target question count and distribution for Custom Set Creation
+  const [targetQuestionMode, setTargetQuestionMode] = useState<'all' | 'preset' | 'custom'>('all')
+  const [customTargetCountInput, setCustomTargetCountInput] = useState<string>('50')
+  const [topicAllocations, setTopicAllocations] = useState<Record<number, number>>({})
 
   // Exam Mode, Time Setting, and Random state
   const [examMode, setExamMode] = useState<'real_exam' | 'practice'>('real_exam')
@@ -144,6 +232,9 @@ export default function SelectExam() {
         insertData.custom_set_id = customSet.id
         insertData.topic_ids = customSet.topic_ids
         insertData.custom_title = customSet.title
+        if (customSet.topic_distribution) {
+          insertData.topic_distribution = customSet.topic_distribution
+        }
       } else if (topicId) {
         insertData.topic_id = topicId
       }
@@ -174,6 +265,148 @@ export default function SelectExam() {
     }
   }
 
+  // Open Create Custom Modal with initial state
+  const openCreateCustomModal = () => {
+    setCustomSetTitle('')
+    setSelectedTopicIds([])
+    setTargetQuestionMode('all')
+    setCustomTargetCountInput('50')
+    setTopicAllocations({})
+    setShowCreateCustomModal(true)
+  }
+
+  // Calculate available questions across selected topics
+  const totalAvailableQuestions = topics
+    .filter((t) => selectedTopicIds.includes(t.id))
+    .reduce((sum, t) => sum + (t.questionCount || 0), 0)
+
+  // Toggle selection of a topic
+  const handleToggleTopic = (topicId: number) => {
+    const isChecked = selectedTopicIds.includes(topicId)
+    const nextSelected = isChecked
+      ? selectedTopicIds.filter((id) => id !== topicId)
+      : [...selectedTopicIds, topicId]
+
+    setSelectedTopicIds(nextSelected)
+
+    const nextAvail = topics
+      .filter((t) => nextSelected.includes(t.id))
+      .reduce((sum, t) => sum + (t.questionCount || 0), 0)
+
+    if (targetQuestionMode === 'all') {
+      const newAlloc: Record<number, number> = {}
+      topics
+        .filter((t) => nextSelected.includes(t.id))
+        .forEach((t) => {
+          newAlloc[t.id] = t.questionCount || 0
+        })
+      setTopicAllocations(newAlloc)
+    } else {
+      const currentTarget = Math.max(1, parseInt(customTargetCountInput) || 50)
+      const clamped = Math.min(currentTarget, nextAvail || 50)
+      const newAlloc = calculateProportionalAllocation(nextSelected, topics, clamped)
+      setTopicAllocations(newAlloc)
+    }
+  }
+
+  // Select all topics
+  const handleSelectAllTopics = () => {
+    const allIds = topics.map((t) => t.id)
+    setSelectedTopicIds(allIds)
+    const allAvail = topics.reduce((sum, t) => sum + (t.questionCount || 0), 0)
+
+    if (targetQuestionMode === 'all') {
+      const newAlloc: Record<number, number> = {}
+      topics.forEach((t) => {
+        newAlloc[t.id] = t.questionCount || 0
+      })
+      setTopicAllocations(newAlloc)
+    } else {
+      const currentTarget = Math.max(1, parseInt(customTargetCountInput) || 50)
+      const clamped = Math.min(currentTarget, allAvail)
+      const newAlloc = calculateProportionalAllocation(allIds, topics, clamped)
+      setTopicAllocations(newAlloc)
+    }
+  }
+
+  // Clear all topics
+  const handleClearAllTopics = () => {
+    setSelectedTopicIds([])
+    setTopicAllocations({})
+  }
+
+  // Select question preset (All, 20, 30, 50, 100)
+  const handleSelectQuestionPreset = (preset: 'all' | number) => {
+    if (preset === 'all') {
+      setTargetQuestionMode('all')
+      const newAlloc: Record<number, number> = {}
+      topics
+        .filter((t) => selectedTopicIds.includes(t.id))
+        .forEach((t) => {
+          newAlloc[t.id] = t.questionCount || 0
+        })
+      setTopicAllocations(newAlloc)
+    } else {
+      setTargetQuestionMode('preset')
+      setCustomTargetCountInput(String(preset))
+      const clamped = Math.min(preset, totalAvailableQuestions)
+      const newAlloc = calculateProportionalAllocation(selectedTopicIds, topics, clamped)
+      setTopicAllocations(newAlloc)
+    }
+  }
+
+  // Custom target count input change
+  const handleCustomTargetChange = (valStr: string) => {
+    setCustomTargetCountInput(valStr)
+    setTargetQuestionMode('custom')
+    const val = parseInt(valStr)
+    if (!isNaN(val) && val > 0 && totalAvailableQuestions > 0) {
+      const clamped = Math.min(val, totalAvailableQuestions)
+      const newAlloc = calculateProportionalAllocation(selectedTopicIds, topics, clamped)
+      setTopicAllocations(newAlloc)
+    }
+  }
+
+  // Adjust individual topic question count (+ / -)
+  const handleAdjustTopicCount = (topicId: number, delta: number) => {
+    const topic = topics.find((t) => t.id === topicId)
+    const maxAvail = topic?.questionCount || 0
+    const current = topicAllocations[topicId] || 0
+    const nextVal = Math.max(1, Math.min(current + delta, maxAvail))
+    if (nextVal === current) return
+
+    const updated = { ...topicAllocations, [topicId]: nextVal }
+    setTopicAllocations(updated)
+    const newTotal = selectedTopicIds.reduce((sum, tid) => sum + (updated[tid] || 0), 0)
+    setTargetQuestionMode('custom')
+    setCustomTargetCountInput(String(newTotal))
+  }
+
+  // Active total questions to test
+  const activeCustomTotalQuestions = selectedTopicIds.reduce(
+    (sum, tid) => sum + (topicAllocations[tid] || 0),
+    0
+  )
+
+  // Full breakdown with percentage and color
+  const topicDistributionBreakdown = selectedTopicIds.map((tid, idx) => {
+    const topic = topics.find((t) => t.id === tid)
+    const count = topicAllocations[tid] || 0
+    const available = topic?.questionCount || 0
+    const percent = activeCustomTotalQuestions > 0
+      ? Math.round((count / activeCustomTotalQuestions) * 1000) / 10
+      : 0
+    const color = TOPIC_PALETTE[idx % TOPIC_PALETTE.length]
+    return {
+      topic_id: tid,
+      name: topic?.name || '',
+      question_count: count,
+      available_count: available,
+      percentage: percent,
+      color,
+    }
+  })
+
   // Handle Create Custom Exam Set
   const handleSaveCustomSet = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -193,14 +426,22 @@ export default function SelectExam() {
       return
     }
 
+    if (activeCustomTotalQuestions <= 0) {
+      toast.warning('กรุณาระบุจำนวนข้อสอบอย่างน้อย 1 ข้อ')
+      return
+    }
+
     try {
       setIsSavingCustomSet(true)
       const primaryExam = exams[0] || { id: 1 }
 
-      // Calculate total question count for selected topics
-      const totalSelectedQuestions = topics
-        .filter((t) => selectedTopicIds.includes(t.id))
-        .reduce((sum, t) => sum + (t.questionCount || 0), 0)
+      const distributionToSave = topicDistributionBreakdown.map((item) => ({
+        topic_id: item.topic_id,
+        name: item.name,
+        question_count: item.question_count,
+        available_count: item.available_count,
+        percentage: item.percentage,
+      }))
 
       const { data: newSet, error } = await supabase
         .from('custom_exam_sets')
@@ -209,7 +450,8 @@ export default function SelectExam() {
           exam_id: primaryExam.id,
           title: trimmedTitle,
           topic_ids: selectedTopicIds,
-          total_questions: totalSelectedQuestions,
+          total_questions: activeCustomTotalQuestions,
+          topic_distribution: distributionToSave,
         })
         .select()
         .single()
@@ -220,7 +462,7 @@ export default function SelectExam() {
       setShowCreateCustomModal(false)
       setCustomSetTitle('')
       setSelectedTopicIds([])
-      toast.success(`สร้างชุดข้อสอบ "${trimmedTitle}" (${totalSelectedQuestions} ข้อ) เรียบร้อยแล้ว`)
+      toast.success(`สร้างชุดข้อสอบ "${trimmedTitle}" (${activeCustomTotalQuestions} ข้อ) เรียบร้อยแล้ว`)
     } catch (err: any) {
       console.error(err)
       toast.error(err.message || 'ไม่สามารถสร้างชุดข้อสอบได้')
@@ -829,11 +1071,7 @@ export default function SelectExam() {
                     </p>
                   </div>
                   <button
-                    onClick={() => {
-                      setCustomSetTitle('')
-                      setSelectedTopicIds([])
-                      setShowCreateCustomModal(true)
-                    }}
+                    onClick={openCreateCustomModal}
                     className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all cursor-pointer flex-shrink-0"
                   >
                     <Plus size={16} strokeWidth={2.5} />
@@ -849,15 +1087,11 @@ export default function SelectExam() {
                     <div className="max-w-md mx-auto space-y-1.5">
                       <h3 className="font-bold text-slate-800 text-base">ยังไม่มีชุดข้อสอบที่สร้างเอง</h3>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        คุณสามารถหยิบเลือกหมวดวิชา 2 หมวดขึ้นไปมารวมกันเป็นชุดฝึกเฉพาะตัว เช่น เน้นเฉพาะ พ.ร.บ. หรือเน้นวิชาความจำ
+                        คุณสามารถหยิบเลือกหมวดวิชา 2 หมวดขึ้นไปมารวมกันเป็นชุดฝึกเฉพาะตัว เช่น เน้นเฉพาะ พ.ร.บ. หรือเน้นวิชาความจำ พร้อมกำหนดจำนวนข้อและสัดส่วน % ได้
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        setCustomSetTitle('')
-                        setSelectedTopicIds([])
-                        setShowCreateCustomModal(true)
-                      }}
+                      onClick={openCreateCustomModal}
                       className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer active:scale-95 transition-all"
                     >
                       <Plus size={15} />
@@ -870,7 +1104,18 @@ export default function SelectExam() {
                       const isStarting = startingId === `custom-${cSet.id}`
                       const setTopicIds: number[] = Array.isArray(cSet.topic_ids) ? cSet.topic_ids : []
                       const selectedTopicsList = topics.filter((t) => setTopicIds.includes(t.id))
-                      const totalQuestions = selectedTopicsList.reduce((sum, t) => sum + (t.questionCount || 0), 0)
+                      const totalAvailable = selectedTopicsList.reduce((sum, t) => sum + (t.questionCount || 0), 0)
+                      const totalQuestions = cSet.total_questions || totalAvailable
+
+                      // Topic distribution with colors and percentages
+                      const distribution: any[] = Array.isArray(cSet.topic_distribution) && cSet.topic_distribution.length > 0
+                        ? cSet.topic_distribution
+                        : selectedTopicsList.map((t) => ({
+                            topic_id: t.id,
+                            name: t.name,
+                            question_count: t.questionCount,
+                            percentage: totalAvailable > 0 ? Math.round((t.questionCount / totalAvailable) * 1000) / 10 : 0,
+                          }))
 
                       return (
                         <div
@@ -883,9 +1128,14 @@ export default function SelectExam() {
                                 <Layers size={11} />
                                 <span>{selectedTopicsList.length} หมวดวิชา</span>
                               </span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
                                   {totalQuestions} ข้อ
+                                  {totalQuestions < totalAvailable && (
+                                    <span className="text-slate-400 font-normal ml-1">
+                                      / {totalAvailable}
+                                    </span>
+                                  )}
                                 </span>
                                 <button
                                   onClick={(e) => handleDeleteCustomSet(cSet.id, e)}
@@ -906,16 +1156,41 @@ export default function SelectExam() {
                               {cSet.title}
                             </h3>
 
-                            {/* Tags of selected topics */}
+                            {/* Percentage Breakdown Progress Bar */}
+                            <div className="w-full h-2 rounded-full bg-slate-100 flex overflow-hidden mb-3 border border-slate-200/60 shadow-inner">
+                              {distribution.map((d: any, dIdx: number) => {
+                                const color = TOPIC_PALETTE[dIdx % TOPIC_PALETTE.length]
+                                const pct = d.percentage ?? (totalQuestions > 0 ? Math.round((d.question_count / totalQuestions) * 100) : 0)
+                                return (
+                                  <div
+                                    key={d.topic_id || dIdx}
+                                    className={`${color.bar} h-full transition-all`}
+                                    style={{ width: `${pct}%` }}
+                                    title={`${d.name}: ${d.question_count} ข้อ (${pct}%)`}
+                                  />
+                                )
+                              })}
+                            </div>
+
+                            {/* Tags of topics with percentage breakdown */}
                             <div className="flex flex-wrap gap-1.5 mb-4">
-                              {selectedTopicsList.map((t) => (
-                                <span
-                                  key={t.id}
-                                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-medium truncate max-w-[200px]"
-                                >
-                                  {t.name}
-                                </span>
-                              ))}
+                              {distribution.map((d: any, dIdx: number) => {
+                                const color = TOPIC_PALETTE[dIdx % TOPIC_PALETTE.length]
+                                const pct = d.percentage ?? (totalQuestions > 0 ? Math.round((d.question_count / totalQuestions) * 100) : 0)
+                                return (
+                                  <span
+                                    key={d.topic_id || dIdx}
+                                    className={`text-[11px] px-2.5 py-1 rounded-lg ${color.light} ${color.text} border ${color.border} font-medium flex items-center gap-1.5`}
+                                    title={`${d.name}: ${d.question_count} ข้อ (${pct}%)`}
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${color.bg} flex-shrink-0`} />
+                                    <span className="truncate max-w-[130px]">{d.name}</span>
+                                    <span className="font-bold flex-shrink-0">
+                                      {d.question_count} ข้อ ({pct}%)
+                                    </span>
+                                  </span>
+                                )
+                              })}
                             </div>
                           </div>
 
@@ -1268,7 +1543,7 @@ export default function SelectExam() {
       {/* Modal: Create Custom Exam Set Dialog */}
       {showCreateCustomModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col animate-modal overflow-hidden">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col animate-modal overflow-hidden">
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-purple-50/60">
               <div className="flex items-center gap-3">
@@ -1280,7 +1555,7 @@ export default function SelectExam() {
                     จัดชุดข้อสอบด้วยตัวเอง
                   </h3>
                   <p className="text-xs text-slate-500">
-                    เลือกหมวดวิชาที่ต้องการฝึกฝนผสมกัน บันทึกเก็บไว้ฝึกซ้อมได้ตลอด
+                    เลือกหมวดวิชา กำหนดจำนวนข้อที่ต้องการสอบ พร้อมคำนวณสัดส่วน % แต่ละส่วน
                   </p>
                 </div>
               </div>
@@ -1295,7 +1570,7 @@ export default function SelectExam() {
 
             {/* Modal Form Body */}
             <form onSubmit={handleSaveCustomSet} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
+              <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
                 {/* 1. Title Input */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
@@ -1316,12 +1591,12 @@ export default function SelectExam() {
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700">
-                      เลือกหมวดวิชาที่ต้องการรวม ({selectedTopicIds.length}/{topics.length} หมวด):
+                      1. เลือกหมวดวิชาที่ต้องการรวม ({selectedTopicIds.length}/{topics.length} หมวด):
                     </label>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedTopicIds(topics.map((t) => t.id))}
+                        onClick={handleSelectAllTopics}
                         className="text-[11px] font-bold text-purple-600 hover:underline cursor-pointer"
                       >
                         เลือกทั้งหมด
@@ -1329,7 +1604,7 @@ export default function SelectExam() {
                       <span className="text-slate-300">•</span>
                       <button
                         type="button"
-                        onClick={() => setSelectedTopicIds([])}
+                        onClick={handleClearAllTopics}
                         className="text-[11px] font-bold text-slate-400 hover:underline cursor-pointer"
                       >
                         ล้างที่เลือก
@@ -1337,21 +1612,17 @@ export default function SelectExam() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
                     {topics.map((topic, i) => {
                       const isChecked = selectedTopicIds.includes(topic.id)
                       return (
                         <div
                           key={topic.id}
-                          onClick={() => {
-                            setSelectedTopicIds((prev) =>
-                              isChecked ? prev.filter((id) => id !== topic.id) : [...prev, topic.id]
-                            )
-                          }}
+                          onClick={() => handleToggleTopic(topic.id)}
                           className={`p-3 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
                             isChecked
                               ? 'bg-purple-50/80 border-purple-400 text-purple-950 shadow-sm'
-                              : 'bg-slate-50/60 hover:bg-slate-100/80 border-slate-200 text-slate-700'
+                              : 'bg-white hover:bg-slate-100/80 border-slate-200 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -1365,7 +1636,7 @@ export default function SelectExam() {
                             </span>
                           </div>
                           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                            isChecked ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-600'
+                            isChecked ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'
                           }`}>
                             {topic.questionCount} ข้อ
                           </span>
@@ -1375,15 +1646,208 @@ export default function SelectExam() {
                   </div>
                 </div>
 
-                {/* 3. Summary Pill */}
-                <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200/80 flex items-center justify-between text-xs text-purple-950">
-                  <span className="font-medium">สรุปจำนวนข้อสอบในชุดนี้:</span>
-                  <span className="font-extrabold text-sm text-purple-700">
-                    {topics
-                      .filter((t) => selectedTopicIds.includes(t.id))
-                      .reduce((sum, t) => sum + (t.questionCount || 0), 0)}{' '}
-                    ข้อ
-                  </span>
+                {/* 3. Target Question Setting (Set number of questions to test) */}
+                {selectedTopicIds.length > 0 && (
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <SlidersHorizontal size={14} className="text-purple-600" />
+                        <span>2. กำหนดจำนวนข้อที่ต้องการสอบ:</span>
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        มีข้อสอบทั้งหมดในหมวดที่เลือก: <strong className="text-purple-700">{totalAvailableQuestions} ข้อ</strong>
+                      </span>
+                    </div>
+
+                    {/* Presets and Custom Input */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectQuestionPreset('all')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          targetQuestionMode === 'all'
+                            ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        ทั้งหมด ({totalAvailableQuestions} ข้อ)
+                      </button>
+
+                      {totalAvailableQuestions >= 20 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuestionPreset(20)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            targetQuestionMode === 'preset' && customTargetCountInput === '20'
+                              ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          20 ข้อ
+                        </button>
+                      )}
+
+                      {totalAvailableQuestions >= 30 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuestionPreset(30)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            targetQuestionMode === 'preset' && customTargetCountInput === '30'
+                              ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          30 ข้อ
+                        </button>
+                      )}
+
+                      {totalAvailableQuestions >= 50 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuestionPreset(50)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            targetQuestionMode === 'preset' && customTargetCountInput === '50'
+                              ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          50 ข้อ
+                        </button>
+                      )}
+
+                      {totalAvailableQuestions >= 100 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuestionPreset(100)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            targetQuestionMode === 'preset' && customTargetCountInput === '100'
+                              ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          100 ข้อ
+                        </button>
+                      )}
+
+                      {/* Custom input */}
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <span className="text-xs text-slate-500 font-medium">กำหนดเอง:</span>
+                        <div className="relative flex items-center">
+                          <input
+                            type="number"
+                            min={1}
+                            max={totalAvailableQuestions}
+                            value={customTargetCountInput}
+                            onChange={(e) => handleCustomTargetChange(e.target.value)}
+                            className="w-20 px-2.5 py-1 text-xs text-center font-bold rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                          />
+                          <span className="text-xs text-slate-500 ml-1.5">ข้อ</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Percentage Breakdown Display */}
+                {selectedTopicIds.length > 0 && (
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <PieChart size={14} className="text-purple-600" />
+                        <span>3. สัดส่วนและจำนวนข้อรายหมวด (% Breakdown):</span>
+                      </label>
+                      <span className="text-[11px] font-bold text-purple-700">
+                        รวม {activeCustomTotalQuestions} ข้อ (100%)
+                      </span>
+                    </div>
+
+                    {/* Visual Segmented Progress Bar */}
+                    <div className="w-full h-3 rounded-full bg-slate-100 flex overflow-hidden border border-slate-200/80 shadow-inner">
+                      {topicDistributionBreakdown.map((item) => (
+                        <div
+                          key={item.topic_id}
+                          className={`${item.color.bar} h-full transition-all`}
+                          style={{ width: `${item.percentage}%` }}
+                          title={`${item.name}: ${item.question_count} ข้อ (${item.percentage}%)`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Breakdown list with per-topic question steppers */}
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {topicDistributionBreakdown.map((item) => (
+                        <div
+                          key={item.topic_id}
+                          className={`p-3 rounded-xl border ${item.color.border} ${item.color.light} flex items-center justify-between gap-3`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={`w-3 h-3 rounded-full ${item.color.bg} flex-shrink-0 shadow-sm`} />
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-800 block truncate">
+                                {item.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                มี {item.available_count} ข้อในระบบ
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Stepper + % badge */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-sm">
+                              <button
+                                type="button"
+                                onClick={() => handleAdjustTopicCount(item.topic_id, -1)}
+                                disabled={item.question_count <= 1}
+                                className="px-2 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 cursor-pointer transition-colors"
+                                title="ลด 1 ข้อ"
+                              >
+                                <Minus size={11} strokeWidth={2.5} />
+                              </button>
+                              <span className="px-2 py-1 text-xs font-extrabold text-slate-800 min-w-[32px] text-center">
+                                {item.question_count}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAdjustTopicCount(item.topic_id, 1)}
+                                disabled={item.question_count >= item.available_count}
+                                className="px-2 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 cursor-pointer transition-colors"
+                                title="เพิ่ม 1 ข้อ"
+                              >
+                                <Plus size={11} strokeWidth={2.5} />
+                              </button>
+                            </div>
+
+                            {/* Percentage Badge */}
+                            <span className={`text-xs font-black px-2 py-1 rounded-lg bg-white ${item.color.text} border ${item.color.border} shadow-sm min-w-[54px] text-center`}>
+                              {item.percentage}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Summary Pill */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-purple-950 shadow-sm">
+                  <div className="space-y-0.5">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>สรุปชุดข้อสอบ:</span>
+                      <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 font-extrabold text-[11px]">
+                        {selectedTopicIds.length} หมวดวิชา
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      มีข้อสอบทั้งหมดในหมวดที่เลือก {totalAvailableQuestions} ข้อ • จัดสอบ {activeCustomTotalQuestions} ข้อ
+                    </p>
+                  </div>
+                  <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center">
+                    <span className="text-[10px] text-purple-600 font-medium">จำนวนข้อที่จะใช้สอบจริง</span>
+                    <span className="font-black text-lg text-purple-700">
+                      {activeCustomTotalQuestions} ข้อ
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1398,7 +1862,7 @@ export default function SelectExam() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingCustomSet || selectedTopicIds.length === 0}
+                  disabled={isSavingCustomSet || selectedTopicIds.length === 0 || activeCustomTotalQuestions === 0}
                   className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-600/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                 >
                   {isSavingCustomSet ? (
@@ -1409,7 +1873,7 @@ export default function SelectExam() {
                   ) : (
                     <>
                       <Check size={16} />
-                      <span>บันทึกชุดข้อสอบ</span>
+                      <span>บันทึกชุดข้อสอบ ({activeCustomTotalQuestions} ข้อ)</span>
                     </>
                   )}
                 </button>

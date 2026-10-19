@@ -106,7 +106,7 @@ export default function ExamSession() {
         // 0. Fetch Attempt details
         const { data: attemptData } = await supabase
           .from('exam_attempts')
-          .select('id, exam_mode, time_limit_seconds, remaining_seconds, time_spent_seconds, is_random, started_at, status, topic_id, topic_ids, custom_title')
+          .select('id, exam_mode, time_limit_seconds, remaining_seconds, time_spent_seconds, is_random, started_at, status, topic_id, topic_ids, topic_distribution, custom_title')
           .eq('id', attemptId)
           .single()
 
@@ -226,6 +226,35 @@ export default function ExamSession() {
             }))
             .sort((a: any, b: any) => a.order_index - b.order_index),
         }))
+
+        // Apply topic quota sampling if attempt has custom topic_distribution
+        const topicDist = attemptData?.topic_distribution
+        if (Array.isArray(topicDist) && topicDist.length > 0) {
+          const baseSeed = Number(attemptId) || 12345
+          const questionsByTopic: Record<number, any[]> = {}
+          formattedQuestions.forEach((q: any) => {
+            const tid = Number(q.topic_id) || 0
+            if (!questionsByTopic[tid]) questionsByTopic[tid] = []
+            questionsByTopic[tid].push(q)
+          })
+
+          let sampledQuestions: any[] = []
+          topicDist.forEach((distItem: any, distIdx: number) => {
+            const tid = Number(distItem.topic_id)
+            const topicQs = questionsByTopic[tid] || []
+            const targetCount = Number(distItem.question_count)
+            if (targetCount > 0 && targetCount < topicQs.length) {
+              // Deterministically sample questions for this topic using attempt seed + topic seed
+              const topicSeed = baseSeed + tid * 1013 + distIdx * 37
+              const shuffledTopicQs = shuffleWithSeed([...topicQs], topicSeed)
+              sampledQuestions = sampledQuestions.concat(shuffledTopicQs.slice(0, targetCount))
+            } else {
+              sampledQuestions = sampledQuestions.concat(topicQs)
+            }
+          })
+
+          formattedQuestions = sampledQuestions
+        }
 
         const shouldRandomize = attemptData?.is_random ?? (searchParams.get('random') === '1')
         if (shouldRandomize && attemptId) {
