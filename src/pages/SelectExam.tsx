@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
-const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2, 3, 4, 5])
+const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2, 3, 4, 5, 6, 7])
 
 export const TOPIC_PALETTE = [
   { bg: 'bg-indigo-500', bar: 'bg-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', border: 'border-indigo-200', hex: '#6366f1' },
