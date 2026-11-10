@@ -107,6 +107,13 @@ export default function ResultSummary() {
       if (!attemptId) return
 
       try {
+        // Verify Supabase authentication state
+        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
+        if (userError || !currentUser) {
+          navigate('/', { replace: true })
+          return
+        }
+
         const { data: attempt, error } = await supabase
           .from('exam_attempts')
           .select(`
@@ -286,8 +293,11 @@ export default function ResultSummary() {
     if (!examId) return
     try {
       setRetaking(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        navigate('/', { replace: true })
+        return
+      }
 
       const insertData: any = {
         exam_id: examId,

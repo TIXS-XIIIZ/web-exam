@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { 
@@ -24,7 +24,13 @@ import {
   Plus,
   SlidersHorizontal,
   PieChart,
-  Minus
+  Minus,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  BookMarked,
+  GraduationCap
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
@@ -117,13 +123,31 @@ export default function SelectExam() {
   const [recentAttempts, setRecentAttempts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [startingId, setStartingId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'all' | 'topics' | 'custom'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'topics' | 'custom' | 'notes'>('all')
   const [editingAttemptId, setEditingAttemptId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [savingTitle, setSavingTitle] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [deletingAttemptId, setDeletingAttemptId] = useState<number | null>(null)
   const [isClearingAll, setIsClearingAll] = useState<boolean>(false)
+
+  // Search filter for topics
+  const [topicSearchQuery, setTopicSearchQuery] = useState<string>('')
+
+  // Study Notes state (57 learning modules & blueprint)
+  const [studyNotes, setStudyNotes] = useState<any[]>([])
+  const [selectedNoteCategory, setSelectedNoteCategory] = useState<string>('all')
+  const [noteSearchQuery, setNoteSearchQuery] = useState<string>('')
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Record<string, boolean>>({})
+  const [readNoteIds, setReadNoteIds] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('web_exam_read_notes')
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  })
+  const [copiedNoteId, setCopiedNoteId] = useState<string | null>(null)
 
   // Custom Exam Sets (User picked topics)
   const [customExamSets, setCustomExamSets] = useState<any[]>([])
@@ -150,7 +174,11 @@ export default function SelectExam() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
+        if (userError || !currentUser) {
+          navigate('/', { replace: true })
+          return
+        }
         setUser(currentUser)
 
         // 1. Fetch Exams
@@ -198,6 +226,14 @@ export default function SelectExam() {
             .limit(50)
           if (attempts) setRecentAttempts(attempts)
         }
+
+        // 5. Fetch Study Notes
+        const { data: notesData, error: notesErr } = await supabase
+          .from('study_notes')
+          .select('*')
+          .order('sequence', { ascending: true })
+        if (notesErr) console.error('Error fetching study notes:', notesErr)
+        if (notesData) setStudyNotes(notesData)
       } catch (err) {
         console.error(err)
       } finally {
@@ -211,8 +247,11 @@ export default function SelectExam() {
     try {
       const startKey = customSet ? `custom-${customSet.id}` : topicId ? `topic-${topicId}` : `exam-${examId}`
       setStartingId(startKey)
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      if (!currentUser) return
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
+      if (userError || !currentUser) {
+        navigate('/', { replace: true })
+        return
+      }
 
       const finalMinutes = isCustomTime ? Math.max(1, parseInt(customMinutesInput) || 180) : timeLimitMinutes
       const timeLimitSecs = examMode === 'real_exam' ? finalMinutes * 60 : null
@@ -605,6 +644,80 @@ export default function SelectExam() {
     navigate('/')
   }
 
+  const primaryExam = exams[0] || { id: 1, title: 'คลังข้อสอบนิติกร (ทั้งหมด)' }
+  const totalQuestionCount = exams.reduce((sum, exam) => sum + (exam.total_questions || 0), 0)
+  const totalQuestionLabel = totalQuestionCount.toLocaleString('th-TH')
+
+  // Study Notes helpers & memos
+  const noteCategories = useMemo(() => {
+    const cats = new Set<string>()
+    studyNotes.forEach((n) => {
+      if (n.category) cats.add(n.category)
+    })
+    return Array.from(cats)
+  }, [studyNotes])
+
+  const filteredStudyNotes = useMemo(() => {
+    return studyNotes.filter((note) => {
+      const matchCat = selectedNoteCategory === 'all' || note.category === selectedNoteCategory
+      const query = noteSearchQuery.trim().toLowerCase()
+      const matchQuery =
+        !query ||
+        note.title?.toLowerCase().includes(query) ||
+        note.content?.toLowerCase().includes(query) ||
+        note.category?.toLowerCase().includes(query)
+      return matchCat && matchQuery
+    })
+  }, [studyNotes, selectedNoteCategory, noteSearchQuery])
+
+  const readCount = useMemo(() => {
+    return studyNotes.filter((n) => readNoteIds[n.id]).length
+  }, [studyNotes, readNoteIds])
+
+  const readPercent = studyNotes.length > 0 ? Math.round((readCount / studyNotes.length) * 100) : 0
+
+  const handleToggleReadNote = (noteId: string) => {
+    setReadNoteIds((prev) => {
+      const next = { ...prev, [noteId]: !prev[noteId] }
+      try {
+        localStorage.setItem('web_exam_read_notes', JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }
+
+  const handleCopyNote = async (note: any) => {
+    try {
+      await navigator.clipboard.writeText(`${note.title}\n\n${note.content}`)
+      setCopiedNoteId(note.id)
+      setTimeout(() => setCopiedNoteId(null), 2000)
+      toast.success('คัดลอกเนื้อหาบทเรียนเรียบร้อยแล้ว')
+    } catch {
+      toast.error('ไม่สามารถคัดลอกข้อความได้')
+    }
+  }
+
+  const handleToggleExpandNote = (noteId: string) => {
+    setExpandedNoteIds((prev) => ({ ...prev, [noteId]: !prev[noteId] }))
+  }
+
+  const handleExpandAllNotes = (expand: boolean) => {
+    const next: Record<string, boolean> = {}
+    if (expand) {
+      filteredStudyNotes.forEach((n) => {
+        next[n.id] = true
+      })
+    }
+    setExpandedNoteIds(next)
+  }
+
+  // Filtered topics by search
+  const filteredTopics = useMemo(() => {
+    const q = topicSearchQuery.trim().toLowerCase()
+    if (!q) return topics
+    return topics.filter((t) => t.name.toLowerCase().includes(q))
+  }, [topics, topicSearchQuery])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-slate-500">
@@ -613,10 +726,6 @@ export default function SelectExam() {
       </div>
     )
   }
-
-  const primaryExam = exams[0] || { id: 1, title: 'คลังข้อสอบนิติกร (ทั้งหมด)' }
-  const totalQuestionCount = exams.reduce((sum, exam) => sum + (exam.total_questions || 0), 0)
-  const totalQuestionLabel = totalQuestionCount.toLocaleString('th-TH')
 
   return (
     <div className="min-h-screen bg-slate-50/80 text-slate-800 flex flex-col">
@@ -860,7 +969,7 @@ export default function SelectExam() {
               }`}
             >
               <BookOpen size={16} />
-              <span>2. ทำข้อสอบรวมทั้งหมด ({totalQuestionLabel} ข้อ)</span>
+              <span>ทำข้อสอบรวมทั้งหมด ({totalQuestionLabel} ข้อ)</span>
             </button>
             <button
               onClick={() => setActiveTab('topics')}
@@ -871,7 +980,7 @@ export default function SelectExam() {
               }`}
             >
               <Filter size={16} />
-              <span>2. เลือกทำเฉพาะหมวด</span>
+              <span>เลือกทำเฉพาะหมวด</span>
               <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700 font-extrabold">
                 {topics.length} หมวด
               </span>
@@ -885,12 +994,26 @@ export default function SelectExam() {
               }`}
             >
               <SlidersHorizontal size={16} />
-              <span>2. จัดชุดข้อสอบเอง</span>
+              <span>จัดชุดข้อสอบเอง</span>
               {customExamSets.length > 0 && (
                 <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-extrabold">
                   {customExamSets.length} ชุด
                 </span>
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'notes'
+                  ? 'bg-white text-emerald-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <GraduationCap size={16} />
+              <span>คู่มือและบทเรียนสรุป</span>
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-extrabold">
+                {studyNotes.length || 57} หัวข้อ
+              </span>
             </button>
           </div>
         </div>
@@ -994,66 +1117,92 @@ export default function SelectExam() {
             ) : activeTab === 'topics' ? (
               /* TAB 2: SELECT SPECIFIC TOPIC */
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">เลือกทำเฉพาะหมวด</h2>
                     <p className="text-xs text-slate-500">เลือกหัวข้อที่ต้องการฝึกฝน ระบบจะแสดงเฉพาะข้อสอบในหมวดนั้น</p>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {topics.length} หมวดวิชา
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 self-start sm:self-auto">
+                    {filteredTopics.length} / {topics.length} หมวดวิชา
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {topics.map((topic, idx) => {
-                    const isStarting = startingId === `topic-${topic.id}`
-                    return (
-                      <div
-                        key={topic.id}
-                        className="group bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-3">
-                            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
-                              {idx + 1}
-                            </span>
-                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                              {topic.questionCount} ข้อ
-                            </span>
-                          </div>
-                          <h3 className="font-bold text-slate-900 text-sm mb-3 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
-                            {topic.name}
-                          </h3>
-                        </div>
-
-                        <button
-                          onClick={() => handleStartExam(primaryExam.id, topic.id)}
-                          disabled={isStarting}
-                          className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-semibold text-xs active:scale-95 transition-all duration-200 cursor-pointer disabled:opacity-70 ${
-                            examMode === 'real_exam'
-                              ? 'bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 hover:border-amber-600 shadow-sm hover:shadow-amber-600/20'
-                              : 'bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white shadow-sm hover:shadow-indigo-600/20'
-                          }`}
-                        >
-                          {isStarting ? (
-                            <Loader2 size={15} className="animate-spin" />
-                          ) : (
-                            <>
-                              <span>
-                                {examMode === 'real_exam'
-                                  ? `สอบจริงหมวดนี้ (${timeLimitMinutes} น.)`
-                                  : `เริ่มทำหมวดนี้ (${topic.questionCount} ข้อ)`}
-                              </span>
-                              <ChevronRight size={15} />
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )
-                  })}
+                {/* Topic Search Input */}
+                <div className="relative">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาหมวดวิชา... (เช่น พ.ร.บ., ภาษี, ปกครอง, ละเมิด, ราคาโอน)"
+                    value={topicSearchQuery}
+                    onChange={(e) => setTopicSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
+                  />
+                  {topicSearchQuery && (
+                    <button
+                      onClick={() => setTopicSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
+
+                {filteredTopics.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500 text-xs sm:text-sm">
+                    ไม่พบหมวดวิชาที่ตรงกับคำค้นหา "{topicSearchQuery}"
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredTopics.map((topic, idx) => {
+                      const isStarting = startingId === `topic-${topic.id}`
+                      return (
+                        <div
+                          key={topic.id}
+                          className="group bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-indigo-500/50 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
+                                {idx + 1}
+                              </span>
+                              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                {topic.questionCount} ข้อ
+                              </span>
+                            </div>
+                            <h3 className="font-bold text-slate-900 text-sm mb-3 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
+                              {topic.name}
+                            </h3>
+                          </div>
+
+                          <button
+                            onClick={() => handleStartExam(primaryExam.id, topic.id)}
+                            disabled={isStarting}
+                            className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-semibold text-xs active:scale-95 transition-all duration-200 cursor-pointer disabled:opacity-70 ${
+                              examMode === 'real_exam'
+                                ? 'bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 hover:border-amber-600 shadow-sm hover:shadow-amber-600/20'
+                                : 'bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white shadow-sm hover:shadow-indigo-600/20'
+                            }`}
+                          >
+                            {isStarting ? (
+                              <Loader2 size={15} className="animate-spin" />
+                            ) : (
+                              <>
+                                <span>
+                                  {examMode === 'real_exam'
+                                    ? `สอบจริงหมวดนี้ (${timeLimitMinutes} น.)`
+                                    : `เริ่มทำหมวดนี้ (${topic.questionCount} ข้อ)`}
+                                </span>
+                                <ChevronRight size={15} />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            ) : (
+            ) : activeTab === 'custom' ? (
               /* TAB 3: CUSTOM EXAM SETS (USER SELECTED TOPICS) */
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1214,6 +1363,228 @@ export default function SelectExam() {
                               </>
                             )}
                           </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* TAB 4: STUDY NOTES & BLUEPRINT (57 MODULES) */
+              <div className="space-y-5">
+                {/* Header Banner & Reading Progress */}
+                <div className="bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
+                  <div className="relative z-10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold mb-2">
+                          <GraduationCap size={14} />
+                          <span>คู่มือและแผนอ่านสอบนิติกร 2569</span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+                          สรุปเนื้อหาและแนวทางอ่านสอบ
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl leading-relaxed">
+                          รวบรวมยุทธศาสตร์การกระจายน้ำหนักข้อสอบ Blueprint วิเคราะห์กฎหมาย และเทคนิคการจำ 57 หัวข้อ
+                        </p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center min-w-[140px] flex-shrink-0">
+                        <span className="text-[11px] text-emerald-200 block font-medium">ความคืบหน้าการอ่าน</span>
+                        <div className="text-2xl font-extrabold text-white mt-0.5">
+                          {readCount} <span className="text-xs text-slate-300 font-normal">/ {studyNotes.length}</span>
+                        </div>
+                        <span className="text-[11px] font-semibold text-emerald-300">{readPercent}% สำเร็จ</span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-400 h-full transition-all duration-500 rounded-full"
+                        style={{ width: `${readPercent}%` }}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-slate-300">
+                      <span>ครอบคลุมทั้งหมวดกฎหมายหลัก (75%) และสรรพากร/เทคโนโลยี (25%)</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleExpandAllNotes(true)}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer text-xs"
+                        >
+                          ขยายทั้งหมด
+                        </button>
+                        <button
+                          onClick={() => handleExpandAllNotes(false)}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer text-xs"
+                        >
+                          ยุบทั้งหมด
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Search & Category Filter Controls */}
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="ค้นหาชื่อหัวข้อ เนื้อหากฎหมาย มาตรา หรือคีย์เวิร์ดในบทเรียน..."
+                      value={noteSearchQuery}
+                      onChange={(e) => setNoteSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm transition-all"
+                    />
+                    {noteSearchQuery && (
+                      <button
+                        onClick={() => setNoteSearchQuery('')}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Category Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+                    <button
+                      onClick={() => setSelectedNoteCategory('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                        selectedNoteCategory === 'all'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      ทั้งหมด ({studyNotes.length})
+                    </button>
+                    {noteCategories.map((cat) => {
+                      const count = studyNotes.filter((n) => n.category === cat).length
+                      const isSelected = selectedNoteCategory === cat
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setSelectedNoteCategory(cat)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          <span className="truncate max-w-[200px] inline-block align-bottom">{cat}</span> ({count})
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Notes List */}
+                {filteredStudyNotes.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 text-slate-500 space-y-2">
+                    <BookMarked size={36} className="mx-auto text-slate-300" />
+                    <p className="font-medium text-sm">ไม่พบบทเรียนที่ตรงกับเงื่อนไขการค้นหา</p>
+                    <p className="text-xs text-slate-400">ลองล้างคำค้นหาหรือเปลี่ยนหมวดหมู่</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredStudyNotes.map((note) => {
+                      const isExpanded = !!expandedNoteIds[note.id] || !!noteSearchQuery
+                      const isRead = !!readNoteIds[note.id]
+                      const isCopied = copiedNoteId === note.id
+
+                      return (
+                        <div
+                          key={note.id}
+                          className={`bg-white rounded-2xl border transition-all duration-200 shadow-sm ${
+                            isRead
+                              ? 'border-emerald-200/90 bg-emerald-50/20'
+                              : 'border-slate-200/90 hover:border-slate-300'
+                          }`}
+                        >
+                          {/* Note Card Header */}
+                          <div
+                            onClick={() => handleToggleExpandNote(note.id)}
+                            className="p-4 sm:p-5 flex items-start justify-between gap-3 cursor-pointer select-none"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <span
+                                className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
+                                  isRead
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {note.sequence}
+                              </span>
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 truncate max-w-[260px]">
+                                    {note.category}
+                                  </span>
+                                  {isRead && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                                      <Check size={11} strokeWidth={3} /> อ่านแล้ว
+                                    </span>
+                                  )}
+                                </div>
+                                <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug">
+                                  {note.title}
+                                </h3>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleToggleReadNote(note.id)}
+                                className={`p-2 rounded-xl text-xs font-semibold transition-all cursor-pointer active:scale-95 border ${
+                                  isRead
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                    : 'bg-white hover:bg-slate-50 text-slate-500 border-slate-200'
+                                }`}
+                                title={isRead ? 'ทำเครื่องหมายว่ายังไม่ได้อ่าน' : 'ทำเครื่องหมายว่าอ่านแล้ว'}
+                              >
+                                <CheckCircle size={15} className={isRead ? 'text-emerald-600' : 'text-slate-400'} />
+                              </button>
+                              <button
+                                onClick={() => handleCopyNote(note)}
+                                className="p-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 transition-all cursor-pointer active:scale-95"
+                                title="คัดลอกเนื้อหา"
+                              >
+                                {isCopied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
+                              </button>
+                              <button
+                                onClick={() => handleToggleExpandNote(note.id)}
+                                className="p-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 transition-all cursor-pointer"
+                                title={isExpanded ? 'ยุบเนื้อหา' : 'เปิดดูเนื้อหา'}
+                              >
+                                {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Note Expanded Content */}
+                          {isExpanded && (
+                            <div className="px-4 sm:px-5 pb-5 pt-1 border-t border-slate-100">
+                              <div className="bg-slate-50/80 rounded-2xl p-4 sm:p-5 border border-slate-200/60 font-sans text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-line select-text">
+                                {note.content}
+                              </div>
+                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                                <span>แหล่งข้อมูล: {note.source_file} (บรรทัด {note.source_line_start}–{note.source_line_end})</span>
+                                <button
+                                  onClick={() => handleToggleReadNote(note.id)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                                    isRead
+                                      ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
+                                  }`}
+                                >
+                                  <Check size={13} strokeWidth={2.5} />
+                                  <span>{isRead ? 'อ่านบทนี้แล้ว (คลิกเพื่อยกเลิก)' : 'บันทึกว่าอ่านจบแล้ว'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
                     })}

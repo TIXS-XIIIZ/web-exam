@@ -16,7 +16,9 @@ import {
   Clock,
   Shuffle,
   Pause,
-  Play
+  Play,
+  Bookmark,
+  Keyboard
 } from 'lucide-react'
 import { cleanThaiText } from '../lib/formatThaiText'
 import { useAlert } from '../components/AlertProvider'
@@ -87,6 +89,10 @@ export default function ExamSession() {
   const [isTimeUpModal, setIsTimeUpModal] = useState<boolean>(false)
   const [isRandom, setIsRandom] = useState<boolean>(false)
 
+  // Question Bookmark & Drawer tab
+  const [flaggedIds, setFlaggedIds] = useState<Record<number, boolean>>({})
+  const [drawerTab, setDrawerTab] = useState<'all' | 'flagged'>('all')
+
   // Tracking per-question time refs
   const questionStartTimeRef = useRef<number>(Date.now())
   const questionTimesRef = useRef<Record<number, number>>({})
@@ -103,6 +109,13 @@ export default function ExamSession() {
       if (!examId || !attemptId) return
 
       try {
+        // Verify Supabase authentication state
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          navigate('/', { replace: true })
+          return
+        }
+
         // 0. Fetch Attempt details
         const { data: attemptData } = await supabase
           .from('exam_attempts')
@@ -464,6 +477,48 @@ export default function ExamSession() {
     setCurrentIndex(newIndex)
   }
 
+  const handleToggleFlag = (questionId: number) => {
+    setFlaggedIds((prev) => {
+      const isFlagged = !prev[questionId]
+      if (isFlagged) {
+        toast.info('ปักหมุดข้อนี้ไว้ทบทวนแล้ว')
+      }
+      return { ...prev, [questionId]: isFlagged }
+    })
+  }
+
+  // Keyboard navigation & answer selection shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return
+      if (showFinishModal || isTimeUpModal || isPaused || submitting || loading) return
+
+      const currentQ = questions[currentIndex]
+      if (!currentQ) return
+
+      if (['1', '2', '3', '4'].includes(e.key)) {
+        const choiceIdx = parseInt(e.key) - 1
+        const targetChoice = currentQ.choices[choiceIdx]
+        if (targetChoice) {
+          handleSelectAnswer(targetChoice.id, targetChoice.is_correct)
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (currentIndex < questions.length - 1) {
+          handleNavigateQuestion(currentIndex + 1)
+        }
+      } else if (e.key === 'ArrowLeft') {
+        if (currentIndex > 0) {
+          handleNavigateQuestion(currentIndex - 1)
+        }
+      } else if (e.key.toLowerCase() === 'f') {
+        handleToggleFlag(currentQ.id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentIndex, questions, answers, showFinishModal, isTimeUpModal, isPaused, submitting, loading, examMode])
+
   const handleSelectAnswer = async (choiceId: number, isCorrect: boolean) => {
     const currentQ = questions[currentIndex]
     if (!currentQ) return
@@ -748,6 +803,19 @@ export default function ExamSession() {
                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 flex-shrink-0">
                   ข้อที่ {currentIndex + 1}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleToggleFlag(currentQ.id)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border active:scale-95 ${
+                    flaggedIds[currentQ.id]
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                  }`}
+                  title="ปักหมุดข้อนี้เพื่อกลับมาทบทวน (คีย์ลัด: F)"
+                >
+                  <Bookmark size={12} fill={flaggedIds[currentQ.id] ? 'currentColor' : 'none'} />
+                  <span className="hidden sm:inline">{flaggedIds[currentQ.id] ? 'ปักหมุดแล้ว' : 'ปักหมุด'}</span>
+                </button>
                 {examMode === 'real_exam' && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
                     สอบจริง (เปลี่ยนคำตอบได้)
@@ -814,7 +882,10 @@ export default function ExamSession() {
                         {choice.choice_text.replace(/^[ก-ง]\.\s*/, '')}
                       </span>
                     </div>
-                    {icon}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="hidden sm:inline text-[10px] text-slate-400 font-mono">[{idx + 1}]</span>
+                      {icon}
+                    </div>
                   </button>
                 )
               })}
@@ -878,18 +949,24 @@ export default function ExamSession() {
             <span>ก่อนหน้า</span>
           </button>
 
-          {/* Center question jump pill */}
-          <button
-            onClick={() => {
-              flushCurrentQuestionTime()
-              setShowDrawer(true)
-            }}
-            className="px-3 sm:px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all flex-shrink-0"
-            title="ดูสารบัญข้อสอบทั้งหมด"
-          >
-            <Grid3X3 size={14} className="text-indigo-600" />
-            <span>{currentIndex + 1} / {questions.length}</span>
-          </button>
+          {/* Center question jump pill & keyboard shortcut hint */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                flushCurrentQuestionTime()
+                setShowDrawer(true)
+              }}
+              className="px-3 sm:px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all flex-shrink-0"
+              title="ดูสารบัญข้อสอบทั้งหมด"
+            >
+              <Grid3X3 size={14} className="text-indigo-600" />
+              <span>{currentIndex + 1} / {questions.length}</span>
+            </button>
+            <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 font-sans">
+              <Keyboard size={13} className="text-slate-400" />
+              <span>คีย์ลัด: [1-4] ตอบ | [← →] เลื่อนข้อ | [F] ปักหมุด</span>
+            </div>
+          </div>
 
           <button
             disabled={currentIndex === questions.length - 1}
@@ -926,73 +1003,109 @@ export default function ExamSession() {
               </button>
             </div>
 
-            {/* Legend */}
-            <div className="px-4 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-3 sm:gap-4 text-[11px] text-slate-600">
-              {examMode === 'real_exam' ? (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-md bg-indigo-600"></span>
-                    <span>ตอบแล้ว</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
-                    <span>ยังไม่ตอบ</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
-                    <span>ตอบถูก</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-md bg-rose-500"></span>
-                    <span>ตอบผิด</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
-                    <span>ยังไม่ตอบ</span>
-                  </div>
-                </>
-              )}
+            {/* Legend & Filter Tabs */}
+            <div className="px-4 sm:px-5 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+              <div className="flex items-center gap-3">
+                {examMode === 'real_exam' ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-md bg-indigo-600"></span>
+                      <span>ตอบแล้ว</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-300"></span>
+                      <span>ยังไม่ตอบ</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
+                      <span>ตอบถูก</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-md bg-rose-500"></span>
+                      <span>ตอบผิด</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                  <span>ปักหมุด</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('all')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                    drawerTab === 'all'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ทั้งหมด ({questions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('flagged')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                    drawerTab === 'flagged'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ปักหมุด ({Object.values(flaggedIds).filter(Boolean).length})
+                </button>
+              </div>
             </div>
 
             {/* Questions Grid */}
             <div className="p-4 sm:p-5 flex-1 overflow-y-auto grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 gap-2">
-              {questions.map((q, idx) => {
-                const ans = answers[q.id]
-                const isCurrent = idx === currentIndex
+              {questions
+                .map((q, idx) => ({ q, idx }))
+                .filter(({ q }) => drawerTab === 'all' || flaggedIds[q.id])
+                .map(({ q, idx }) => {
+                  const ans = answers[q.id]
+                  const isCurrent = idx === currentIndex
 
-                let colorClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                if (examMode === 'real_exam') {
-                  if (ans?.selectedChoiceId) {
-                    colorClass = 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-sm'
-                  }
-                } else {
-                  if (ans) {
-                    if (ans.isCorrect) {
-                      colorClass = 'bg-emerald-500 text-white font-bold border-emerald-600'
-                    } else {
-                      colorClass = 'bg-rose-500 text-white font-bold border-rose-600'
+                  let colorClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                  if (examMode === 'real_exam') {
+                    if (ans?.selectedChoiceId) {
+                      colorClass = 'bg-indigo-600 text-white font-bold border-indigo-700 shadow-sm'
+                    }
+                  } else {
+                    if (ans) {
+                      if (ans.isCorrect) {
+                        colorClass = 'bg-emerald-500 text-white font-bold border-emerald-600'
+                      } else {
+                        colorClass = 'bg-rose-500 text-white font-bold border-rose-600'
+                      }
                     }
                   }
-                }
 
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => {
-                      handleNavigateQuestion(idx)
-                      setShowDrawer(false)
-                    }}
-                    className={`h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-semibold border flex items-center justify-center transition-all cursor-pointer ${colorClass} ${
-                      isCurrent ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                )
-              })}
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => {
+                        handleNavigateQuestion(idx)
+                        setShowDrawer(false)
+                      }}
+                      className={`h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-semibold border flex items-center justify-center transition-all cursor-pointer relative ${colorClass} ${
+                        isCurrent ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
+                      }`}
+                    >
+                      <span>{idx + 1}</span>
+                      {flaggedIds[q.id] && (
+                        <span
+                          className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-1.5 ring-white"
+                          title="ปักหมุดไว้"
+                        />
+                      )}
+                    </button>
+                  )
+                })}
             </div>
           </div>
         </div>

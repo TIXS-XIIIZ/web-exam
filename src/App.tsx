@@ -34,6 +34,7 @@ function App() {
           console.error('OAuth error from URL:', message)
           if (isMounted) {
             setGlobalError(message)
+            setSession(null)
             setLoading(false)
           }
           return
@@ -53,12 +54,24 @@ function App() {
             console.error('setSession failed:', error)
             if (isMounted) {
               setGlobalError(error.message)
+              setSession(null)
               setLoading(false)
             }
             return
           }
 
           if (data?.session && isMounted) {
+            // Verify active user session with Supabase Auth
+            const { data: { user }, error: userError } = await supabase.auth.getUser()
+            if (userError || !user) {
+              if (isMounted) {
+                setGlobalError('ไม่สามารถยืนยันตัวตนกับ Supabase ได้')
+                setSession(null)
+                setLoading(false)
+              }
+              return
+            }
+
             setSession(data.session)
             setLoading(false)
             // Clean tokens from URL address bar
@@ -67,17 +80,33 @@ function App() {
           }
         }
 
-        // 2. Check existing session from localStorage
+        // 2. Check existing session and verify Supabase authentication state
         const { data: { session: existingSession } } = await supabase.auth.getSession()
+        if (!existingSession) {
+          if (isMounted) {
+            setSession(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        // Verify that the session is still active and valid on Supabase Auth server
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
         if (isMounted) {
-          if (existingSession) {
-            setSession(existingSession)
+          if (userError || !user) {
+            console.warn('Supabase authentication verification failed, redirecting to login:', userError)
+            await supabase.auth.signOut().catch(() => {})
+            setSession(null)
+          } else {
+            const { data: { session: currentSession } } = await supabase.auth.getSession()
+            setSession(currentSession || existingSession)
           }
           setLoading(false)
         }
       } catch (err: any) {
         console.error('Auth initialization error:', err)
         if (isMounted) {
+          setSession(null)
           setGlobalError(err?.message || 'ไม่สามารถโหลดข้อมูลสิทธิ์ได้')
           setLoading(false)
         }
@@ -95,6 +124,9 @@ function App() {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (newSession) {
           setSession(newSession)
+          setLoading(false)
+        } else {
+          setSession(null)
           setLoading(false)
         }
       } else if (event === 'SIGNED_OUT') {
@@ -116,7 +148,7 @@ function App() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4 text-slate-300">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-semibold tracking-wide">กำลังเข้าสู่ระบบและเตรียมข้อมูล...</p>
+        <p className="text-sm font-semibold tracking-wide">กำลังตรวจสอบสถานะการเข้าสู่ระบบ...</p>
       </div>
     )
   }
@@ -142,6 +174,7 @@ function App() {
           <Route path="/select" element={session ? <SelectExam /> : <Navigate to="/" replace />} />
           <Route path="/exam/:examId" element={session ? <ExamSession /> : <Navigate to="/" replace />} />
           <Route path="/result/:attemptId" element={session ? <ResultSummary /> : <Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to={session ? "/select" : "/"} replace />} />
         </Routes>
       </AlertProvider>
     </Router>
