@@ -34,6 +34,8 @@ import {
 } from 'lucide-react'
 import { useAlert } from '../components/AlertProvider'
 
+const HUMAN_REVIEWED_TOPIC_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+
 export const TOPIC_PALETTE = [
   { bg: 'bg-indigo-500', bar: 'bg-indigo-500', text: 'text-indigo-700', light: 'bg-indigo-50', border: 'border-indigo-200', hex: '#6366f1' },
   { bg: 'bg-purple-500', bar: 'bg-purple-500', text: 'text-purple-700', light: 'bg-purple-50', border: 'border-purple-200', hex: '#a855f7' },
@@ -1192,10 +1194,12 @@ export default function SelectExam() {
                             <h3 className="font-bold text-slate-900 text-sm mb-2 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
                               {topic.name}
                             </h3>
-                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-lg w-fit border border-emerald-200/60">
-                              <CheckCircle size={13} className="text-emerald-600" />
-                              <span>ตรวจสอบโดยมนุษย์แล้ว</span>
-                            </div>
+                            {HUMAN_REVIEWED_TOPIC_IDS.has(topic.id) && (
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-lg w-fit border border-emerald-200/60">
+                                <CheckCircle size={13} className="text-emerald-600" />
+                                <span>ตรวจสอบโดยมนุษย์แล้ว</span>
+                              </div>
+                            )}
                           </div>
 
                           <button
@@ -1716,10 +1720,12 @@ export default function SelectExam() {
                       </span>
                       <div className="min-w-0">
                         <span className="block truncate group-hover:text-indigo-600 font-medium">{topic.name}</span>
-                        <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
-                          <CheckCircle size={12} aria-hidden="true" />
-                          ตรวจสอบโดยมนุษย์แล้ว
-                        </span>
+                        {HUMAN_REVIEWED_TOPIC_IDS.has(topic.id) && (
+                          <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+                            <CheckCircle size={12} aria-hidden="true" />
+                            ตรวจสอบโดยมนุษย์แล้ว
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 flex-shrink-0">
