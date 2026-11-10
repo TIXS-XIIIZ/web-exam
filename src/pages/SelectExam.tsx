@@ -1189,9 +1189,13 @@ export default function SelectExam() {
                                 {topic.questionCount} ข้อ
                               </span>
                             </div>
-                            <h3 className="font-bold text-slate-900 text-sm mb-3 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
+                            <h3 className="font-bold text-slate-900 text-sm mb-2 line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
                               {topic.name}
                             </h3>
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-lg w-fit border border-emerald-200/60">
+                              <CheckCircle size={13} className="text-emerald-600" />
+                              <span>ตรวจสอบโดยมนุษย์แล้ว</span>
+                            </div>
                           </div>
 
                           <button
