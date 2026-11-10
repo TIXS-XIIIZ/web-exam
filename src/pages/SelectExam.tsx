@@ -777,6 +777,26 @@ export default function SelectExam() {
             <p className="text-xs sm:text-sm md:text-base text-indigo-200 leading-relaxed">
               ฝึกทำโจทย์จำลองเสมือนจริง ตอบปุ๊บเฉลยปั๊บพร้อมคำอธิบาย หรือเลือกลองสอบจริงแบบจับเวลา 3 ชั่วโมงเพื่อวัดความพร้อมก่อนลงสนาม
             </p>
+
+            {/* Quick Stat Badges */}
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 text-white text-xs font-semibold backdrop-blur-sm border border-white/10">
+                <BookOpen size={14} className="text-indigo-300" />
+                <span>{totalQuestionLabel} ข้อสอบในคลัง</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 text-white text-xs font-semibold backdrop-blur-sm border border-white/10">
+                <Layers size={14} className="text-purple-300" />
+                <span>{topics.length} หมวดวิชา</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('notes')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-200 hover:text-white text-xs font-semibold backdrop-blur-sm border border-emerald-400/30 transition-all cursor-pointer"
+              >
+                <GraduationCap size={14} className="text-emerald-300" />
+                <span>57 บทเรียนสรุป & Blueprint (คลิกเปิดอ่าน)</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1622,6 +1642,47 @@ export default function SelectExam() {
                 </div>
               </div>
               <ChevronRight size={18} className="text-slate-400 group-hover:translate-x-1 group-hover:text-indigo-600 transition-all flex-shrink-0 ml-2" />
+            </button>
+
+            {/* Study Notes Shortcut Banner in Sidebar */}
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`w-full text-left rounded-2xl p-4 sm:p-4.5 border shadow-sm transition-all cursor-pointer relative overflow-hidden group ${
+                activeTab === 'notes'
+                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-md shadow-emerald-600/20'
+                  : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-white hover:from-emerald-100 hover:to-teal-100 border-emerald-200/90 text-emerald-950'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-transform ${
+                    activeTab === 'notes' ? 'bg-white/20 text-white' : 'bg-emerald-600 text-white shadow-sm'
+                  }`}>
+                    <GraduationCap size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm leading-tight">
+                      คู่มือและบทเรียนสรุป
+                    </h4>
+                    <span className={`text-[10px] block ${
+                      activeTab === 'notes' ? 'text-emerald-100' : 'text-emerald-700'
+                    }`}>
+                      57 หัวข้อ • อ่านสอบ & Blueprint
+                    </span>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                  activeTab === 'notes' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {readCount}/{studyNotes.length || 57}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-semibold pt-1 border-t border-emerald-200/50">
+                <span className={activeTab === 'notes' ? 'text-emerald-100' : 'text-emerald-800'}>
+                  {activeTab === 'notes' ? 'กำลังเปิดอ่านเนื้อหา' : 'คลิกเพื่อเปิดอ่าน 57 หัวข้อ'}
+                </span>
+                <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </div>
             </button>
 
             {/* 2. Quick Topic Overview Box */}
